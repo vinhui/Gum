@@ -150,8 +150,7 @@ namespace RenderingLibrary
 #if NET6_0_OR_GREATER
             var usesTitleContainer = System.OperatingSystem.IsAndroid() || 
                 System.OperatingSystem.IsIOS() ||
-                System.OperatingSystem.IsBrowser() ||
-                FileManager.CustomGetStreamFromFile != null;
+                System.OperatingSystem.IsBrowser();
 
             if(usesTitleContainer)
             {
