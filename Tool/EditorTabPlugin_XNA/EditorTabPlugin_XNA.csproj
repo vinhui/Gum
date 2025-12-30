@@ -13,6 +13,7 @@
 		<DefineConstants>GUM; MONOGAME</DefineConstants>
 		<!-- This is always complaining even if we put a min version of 7.0, so let's suppress it:-->
 		<NoWarn>$(NoWarn);CA1416</NoWarn>
+		<EnableWindowsTargeting>true</EnableWindowsTargeting>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">

@@ -8,6 +8,7 @@
 		<UseWindowsForms>true</UseWindowsForms>
 		<ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
 		<LangVersion>12.0</LangVersion>
+		<EnableWindowsTargeting>true</EnableWindowsTargeting>
 
 	</PropertyGroup>
 	<ItemGroup>
