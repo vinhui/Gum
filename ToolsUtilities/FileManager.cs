@@ -144,7 +144,7 @@ namespace ToolsUtilities
             fileName = Standardize(fileName, preserveCase: true, makeAbsolute: true);
             if (!ignoreExtensions)
             {
-                if (IsMobile)
+                if (IsMobile || CustomGetStreamFromFile != null)
                 {
                     try
                     {
