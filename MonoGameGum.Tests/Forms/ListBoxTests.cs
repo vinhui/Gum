@@ -1,10 +1,12 @@
 ﻿using Gum.Forms.Controls;
 using Gum.Forms.DefaultVisuals;
 using Gum.Wireframe;
+using MonoGameGum.Forms.DefaultVisuals;
 using Moq;
 using Shouldly;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,6 +15,12 @@ using Xunit;
 namespace MonoGameGum.Tests.Forms;
 public class ListBoxTests : BaseTestClass
 {
+    [Fact]
+    public void Visual_HasEvents_ShouldBeTrue()
+    {
+        ListBox sut = new();
+        sut.Visual.HasEvents.ShouldBeTrue();
+    }
 
     [Fact]
     public void IsEnabled_ShouldSetListBoxItemsDisable_IfSetToFalse()
@@ -70,7 +78,7 @@ public class ListBoxTests : BaseTestClass
         GueInteractiveExtensionMethods.DoUiActivityRecursively(
             listBox.Visual,
             mockCursor.Object,
-            null,
+            null!,
             0);
 
         listBox.SelectedObject.ShouldBeNull();
@@ -88,14 +96,14 @@ public class ListBoxTests : BaseTestClass
 
         Mock<ICursor> mockCursor = SetupForPush();
 
-        mockCursor.SetupProperty(x => x.WindowOver);
+        mockCursor.SetupProperty(x => x.VisualOver);
         mockCursor.SetupProperty(x => x.WindowPushed);
 
 
         GueInteractiveExtensionMethods.DoUiActivityRecursively(
             listBox.Visual,
             mockCursor.Object,
-            null,
+            null!,
             0);
 
 
@@ -103,11 +111,11 @@ public class ListBoxTests : BaseTestClass
         {
             var firstListBoxItem = listBox.ListBoxItems[0];
 
-            var isOverFirst = mockCursor.Object.WindowOver ==
+            var isOverFirst = mockCursor.Object.VisualOver ==
                 firstListBoxItem.Visual;
 
             string diagnostics =
-                $"WindowOver: {mockCursor.Object.WindowOver}" +
+                $"VisualOver: {mockCursor.Object.VisualOver}" +
                 $" WindowPushed: {mockCursor.Object.WindowPushed}" +
                 $" Is over first: {isOverFirst}";
             throw new Exception(diagnostics);
@@ -141,39 +149,6 @@ public class ListBoxTests : BaseTestClass
     }
 
     [Fact]
-    public void Items_Remove_ShouldRemoveListBoxItems()
-    {
-
-        ListBox listBox = new();
-        for (int i = 0; i < 10; i++)
-        {
-            listBox.Items.Add("Item " + i);
-        }
-
-        for(int i = 0; i < 10; i++)
-        {
-            listBox.Items.Remove("Item " + i);
-            listBox.ListBoxItems.Count.ShouldBe(9 - i);
-        }
-    }
-
-    [Fact]
-    public void Items_RemoveAt_ShouldRemoveListBoxItems()
-    {
-        ListBox listBox = new();
-        for (int i = 0; i < 10; i++)
-        {
-            listBox.Items.Add("Item " + i);
-        }
-
-        for (int i = 0; i < 10; i++)
-        {
-            listBox.Items.RemoveAt(0);
-            listBox.ListBoxItems.Count.ShouldBe(9 - i);
-        }
-    }
-
-    [Fact]
     public void Items_Clear_ShouldClearListBoxItems()
     {
         ListBox listBox = new();
@@ -183,6 +158,19 @@ public class ListBoxTests : BaseTestClass
         }
         listBox.Items.Clear();
         listBox.ListBoxItems.Count.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Items_Clear_ShouldWorkWhenAddingButtonVisual()
+    {
+        Gum.Forms.DefaultVisuals.ButtonVisual button = new();
+
+        ListBox listBox = new();
+        button.Parent.ShouldBeNull();
+        listBox.Items.Add(button);
+        button.Parent.ShouldNotBeNull();
+        listBox.Items.Clear(); // should not throw
+        button.Parent.ShouldBeNull();
     }
 
     [Fact]
@@ -202,6 +190,80 @@ public class ListBoxTests : BaseTestClass
         var item5 = listBox.ListBoxItems[0];
         item5.BindingContext.ShouldBe("Item 5");
     }
+
+    [Fact]
+    public void Items_Move_ShouldReorder()
+    {
+        ObservableCollection<string> values = new();
+
+        for (int i = 0; i < 10; i++)
+        {
+            values.Add("Item " + i);
+        }
+
+        ListBox listBox = new();
+
+        listBox.Items = values;
+
+        listBox.ListBoxItems.Count.ShouldBe(10);
+
+        for(int i = 0; i < 10; i++)
+        {
+            listBox.ListBoxItems[i].BindingContext.ShouldBe("Item " + i);
+        }
+
+        values.Move(0, 1);
+
+        listBox.ListBoxItems[0].BindingContext.ShouldBe("Item 1");
+        listBox.ListBoxItems[1].BindingContext.ShouldBe("Item 0");
+
+        var innerPanel = listBox.Visual.GetChildByNameRecursively("InnerPanelInstance")!;
+        innerPanel.Children.Count.ShouldBe(10);
+        for(int i = 0; i < 10; i++)
+        {
+            innerPanel.Children[i].ShouldBe(listBox.ListBoxItems[i].Visual);
+        }
+    }
+
+    [Fact]
+    public void Items_Remove_ShouldRemoveListBoxItems()
+    {
+
+        ListBox listBox = new();
+        for (int i = 0; i < 10; i++)
+        {
+            listBox.Items.Add("Item " + i);
+        }
+
+        for(int i = 0; i < 10; i++)
+        {
+            listBox.Items.Remove("Item " + i);
+            listBox.ListBoxItems.Count.ShouldBe(9 - i);
+            if( listBox.ListBoxItems.Count > 0)
+            {
+                var nextItem = listBox.ListBoxItems[0];
+                nextItem.BindingContext.ShouldBe("Item " + (i + 1));
+            }
+        }
+    }
+
+    [Fact]
+    public void Items_RemoveAt_ShouldRemoveListBoxItems()
+    {
+        ListBox listBox = new();
+        for (int i = 0; i < 10; i++)
+        {
+            listBox.Items.Add("Item " + i);
+        }
+
+        for (int i = 0; i < 10; i++)
+        {
+            listBox.Items.RemoveAt(0);
+            listBox.ListBoxItems.Count.ShouldBe(9 - i);
+        }
+    }
+
+
 
     [Fact]
     public void ListBoxItems_ShouldReflectBackingObjects_WhenRemoving()

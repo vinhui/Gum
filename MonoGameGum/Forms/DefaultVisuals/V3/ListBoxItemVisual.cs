@@ -46,7 +46,7 @@ public class ListBoxItemVisual : InteractiveGue
         get => _highlightedBackgroundColor;
         set
         {
-            if (value != _highlightedBackgroundColor)
+            if (!value.Equals(_highlightedBackgroundColor))
             {
                 _highlightedBackgroundColor = value;
                 FormsControl?.UpdateState();
@@ -60,7 +60,7 @@ public class ListBoxItemVisual : InteractiveGue
         get => _selectedBackgroundColor;
         set
         {
-            if (value != _selectedBackgroundColor)
+            if (!value.Equals(_selectedBackgroundColor))
             {
                 _selectedBackgroundColor = value;
                 FormsControl?.UpdateState();
@@ -74,7 +74,7 @@ public class ListBoxItemVisual : InteractiveGue
         get => _foregroundColor;
         set
         {
-            if (value != _foregroundColor)
+            if (!value.Equals(_foregroundColor))
             {
                 _foregroundColor = value;
                 FormsControl?.UpdateState();
@@ -88,7 +88,7 @@ public class ListBoxItemVisual : InteractiveGue
         get => _focusedIndicatorColor;
         set
         {
-            if (value != _focusedIndicatorColor)
+            if (!value.Equals(_focusedIndicatorColor))
             {
                 _focusedIndicatorColor = value;
                 FormsControl?.UpdateState();
@@ -98,6 +98,7 @@ public class ListBoxItemVisual : InteractiveGue
 
     public ListBoxItemVisual(bool fullInstantiation = true, bool tryCreateFormsObject = true) : base(new InvisibleRenderable())
     {
+        this.HasEvents = true;
         Height = 0f;
         HeightUnits = global::Gum.DataTypes.DimensionUnitType.RelativeToChildren;
         Width = 0f;
@@ -216,5 +217,5 @@ public class ListBoxItemVisual : InteractiveGue
         FocusedIndicator.Color = _focusedIndicatorColor;
     }
 
-    public ListBoxItem FormsControl => FormsControlAsObject as ListBoxItem;
+    public ListBoxItem FormsControl => (ListBoxItem)FormsControlAsObject;
 }

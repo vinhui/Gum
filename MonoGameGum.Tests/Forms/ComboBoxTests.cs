@@ -2,15 +2,16 @@
 using Gum.DataTypes.Variables;
 using Gum.Forms.Controls;
 using Gum.Forms.DefaultVisuals;
+using Gum.Mvvm;
 using Gum.Wireframe;
 using Microsoft.Xna.Framework;
-using Gum.Forms.Controls;
 using MonoGameGum.GueDeriving;
 using Moq;
 using RenderingLibrary.Graphics;
 using Shouldly;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -28,6 +29,13 @@ public  class ComboBoxTests : BaseTestClass
     }
 
     [Fact]
+    public void Visual_HasEvents_ShouldBeTrue()
+    {
+        ComboBox sut = new();
+        sut.Visual.HasEvents.ShouldBeTrue();
+    }
+
+    [Fact]
     public void Clicking_ShouldOpenComboBox_IfInBounds()
     {
         ComboBox comboBox = new ComboBox();
@@ -40,7 +48,7 @@ public  class ComboBoxTests : BaseTestClass
         // combo boxes open on a push
         cursor.Setup(x => x.PrimaryPush).Returns(true);
         cursor.Setup(x => x.WindowPushed).Returns(comboBox.Visual);
-        cursor.Setup(x => x.WindowOver).Returns(comboBox.Visual);
+        cursor.Setup(x => x.VisualOver).Returns(comboBox.Visual);
         Gum.Forms.FormsUtilities.SetCursor(cursor.Object);
 
         GumService.Default.Update(new Microsoft.Xna.Framework.GameTime());
@@ -50,18 +58,51 @@ public  class ComboBoxTests : BaseTestClass
         // Set it up so it's inside the window, but outside the bounds of the combo box
         cursor.Setup(x => x.X).Returns((int)(GraphicalUiElement.CanvasWidth-1));
         cursor.Setup(x => x.XRespectingGumZoomAndBounds()).Returns((int)(GraphicalUiElement.CanvasWidth - 1));
-        cursor.Setup(x => x.WindowOver).Returns((InteractiveGue?)null);
+        cursor.Setup(x => x.VisualOver).Returns((InteractiveGue?)null);
         GumService.Default.Update(new Microsoft.Xna.Framework.GameTime());
 
         comboBox.IsDropDownOpen.ShouldBe(false);
 
     }
 
+    [Fact]
+    public void IsDropDownOpen_ShouldNotResetListBoxItemBindingContext()
+    {
+        ComboBox comboBox = new();
+
+        comboBox.AddToRoot();
+
+        comboBox.Visual.EffectiveManagers.ShouldNotBeNull(
+            "because this is needed to effectively test removal");
+
+        TestViewModel viewModel = new();
+        viewModel.Items.Add("1");
+        viewModel.Items.Add("2");
+        viewModel.Items.Add("3");
+
+        comboBox.BindingContext = viewModel;
+        comboBox.SetBinding(
+            nameof(comboBox.Items),
+            nameof(viewModel.Items));
+
+        comboBox.ListBox.Items.Count.ShouldBe(3);
+        comboBox.ListBox.ListBoxItems.Count.ShouldBe(3);
+        comboBox.ListBox.ListBoxItems[0].BindingContext.ShouldBe("1");
+
+        comboBox.IsDropDownOpen = true;
+
+        comboBox.ListBox.ListBoxItems[0].BindingContext.ShouldBe("1");
+
+        comboBox.IsDropDownOpen = false;
+
+        comboBox.ListBox.ListBoxItems[0].BindingContext.ShouldBe("1");
+
+    }
 
     public class CGComboBox : InteractiveGue
     {
-        public MonoGameGum.Forms.DefaultVisuals.DefaultListBoxRuntime ListBoxInstance;
-        public RectangleRuntime FocusedIndicator { get; private set; }
+        public MonoGameGum.Forms.DefaultVisuals.DefaultListBoxRuntime? ListBoxInstance;
+        public RectangleRuntime? FocusedIndicator { get; private set; }
 
         public CGComboBox(bool fullInstantiation = true, bool tryCreateFormsObject = true) : base(new InvisibleRenderable())
         {
@@ -109,15 +150,6 @@ public  class ComboBoxTests : BaseTestClass
                     currentState = state;
                 }
 
-                void AddVariable(string name, object value)
-                {
-                    currentState.Variables.Add(new VariableSave
-                    {
-                        Name = name,
-                        Value = value
-                    });
-                }
-
                 AddState(FrameworkElement.DisabledStateName);
 
                 AddState(FrameworkElement.DisabledFocusedStateName);
@@ -139,7 +171,15 @@ public  class ComboBoxTests : BaseTestClass
             }
         }
 
-        public ComboBox FormsControl => FormsControlAsObject as ComboBox;
+        public ComboBox FormsControl => (ComboBox)FormsControlAsObject;
+    }
 
+    class TestViewModel : ViewModel
+    {
+        public ObservableCollection<string> Items { get; set; } = new ObservableCollection<string>();
+
+        public TestViewModel()
+        {
+        }
     }
 }

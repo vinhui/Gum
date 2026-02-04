@@ -64,7 +64,7 @@ public class CheckBoxVisual : InteractiveGue
         get => _backgroundColor;
         set
         {
-            if (value != _backgroundColor)
+            if (!value.Equals(_backgroundColor))
             {
                 _backgroundColor = value;
                 FormsControl?.UpdateState();
@@ -77,7 +77,7 @@ public class CheckBoxVisual : InteractiveGue
         get => _foregroundColor;
         set
         {
-            if (value != _foregroundColor)
+            if (!value.Equals(_foregroundColor))
             {
                 _foregroundColor = value;
                 FormsControl?.UpdateState();
@@ -91,7 +91,7 @@ public class CheckBoxVisual : InteractiveGue
         get => _checkColor;
         set
         {
-            if(value != _checkColor)
+            if(!value.Equals(_checkColor))
             {
                 _checkColor = value;
                 FormsControl?.UpdateState();
@@ -105,7 +105,7 @@ public class CheckBoxVisual : InteractiveGue
         get => _focusedIndicatorColor;
         set
         {
-            if (value != _focusedIndicatorColor)
+            if (!value.Equals(_focusedIndicatorColor))
             {
                 _focusedIndicatorColor = value;
                 FormsControl?.UpdateState();
@@ -115,6 +115,7 @@ public class CheckBoxVisual : InteractiveGue
 
     public CheckBoxVisual(bool fullInstantiation = true, bool tryCreateFormsObject = true) : base(new InvisibleRenderable())
     {
+        this.HasEvents = true;
         Width = 128;
         Height = 24;
 
@@ -352,5 +353,5 @@ public class CheckBoxVisual : InteractiveGue
         FocusedIndicator.Color = _focusedIndicatorColor;
     }
 
-    public CheckBox FormsControl => FormsControlAsObject as CheckBox;
+    public CheckBox FormsControl => (CheckBox)FormsControlAsObject;
 }

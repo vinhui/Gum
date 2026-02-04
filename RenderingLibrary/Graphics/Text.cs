@@ -1,21 +1,22 @@
-﻿using System;
-using System.Collections.Generic;
-using RenderingLibrary.Content;
-using RenderingLibrary.Math.Geometry;
+﻿using Gum.Graphics;
 using Microsoft.Xna.Framework.Graphics;
+using RenderingLibrary.Content;
+using RenderingLibrary.Math;
+using RenderingLibrary.Math.Geometry;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Drawing;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using ToolsUtilitiesStandard.Helpers;
 using BlendState = Gum.BlendState;
+using Color = System.Drawing.Color;
 using MathHelper = ToolsUtilitiesStandard.Helpers.MathHelper;
+using Matrix = System.Numerics.Matrix4x4;
 using Vector2 = System.Numerics.Vector2;
 using Vector3 = System.Numerics.Vector3;
-using Color = System.Drawing.Color;
-using Matrix = System.Numerics.Matrix4x4;
-using System.Linq;
-using ToolsUtilitiesStandard.Helpers;
-using System.Drawing;
-using System.Text;
-using RenderingLibrary.Math;
-using Gum.Graphics;
 
 namespace RenderingLibrary.Graphics;
 
@@ -94,11 +95,22 @@ public struct LetterCustomization
 
 public class ParameterizedLetterCustomizationCall
 {
-    public Func<int, string, LetterCustomization> Function { get; set; }
+    public string FunctionName { get; set; } = string.Empty;
+    public Func<int, string, LetterCustomization>? Function
+    {
+        get
+        {
+            if(!string.IsNullOrEmpty(FunctionName) && Text.Customizations.TryGetValue(FunctionName, out var func))
+            {
+                return func;
+            }
+            return null;
+        }
+    }
+
     public int CharacterIndex { get; set; }
 
     public string TextBlock { get; set; }
-
 }
 
 #endregion
@@ -673,7 +685,19 @@ public class Text : SpriteBatchRenderableBase, IRenderableIpso, IVisible, IWrapp
     /// </summary>
     public int LineHeightInPixels => BitmapFont?.LineHeightInPixels ?? 32;
 
-    public float LineHeightMultiplier { get; set; } = 1;
+    float _lineHeightMultiplier = 1;
+    public float LineHeightMultiplier 
+    { 
+        get => _lineHeightMultiplier;
+        set
+        {
+            if(value != _lineHeightMultiplier)
+            {
+                _lineHeightMultiplier = value;
+                UpdatePreRenderDimensions();
+            }
+        }
+    }
 
     bool IRenderableIpso.IsRenderTarget => false;
 
@@ -876,14 +900,14 @@ public class Text : SpriteBatchRenderableBase, IRenderableIpso, IVisible, IWrapp
         }
     }
 
-    void SetNeedsRefresh(object sender, EventArgs args)
+    void SetNeedsRefresh(object? sender, EventArgs args)
     {
         mNeedsBitmapFontRefresh = true;
     }
 
     void UpdateLinePrimitive()
     {
-        if(RenderBoundary)
+        if(RenderBoundary && this.mManagers != null)
         {
             if(mBounds == null)
             {
@@ -1054,7 +1078,7 @@ public class Text : SpriteBatchRenderableBase, IRenderableIpso, IVisible, IWrapp
             else
             {
                 individualLineWidth[0] = widths[i];
-                var lineHeight = fontToUse.EffectiveLineHeight(mFontScale, 1);
+                var lineHeight = fontToUse.EffectiveLineHeight(mFontScale, LineHeightMultiplier);
                 var defaultBaseline = fontToUse.BaselineY;
 
                 float currentFontScale = FontScale;
@@ -1140,7 +1164,7 @@ public class Text : SpriteBatchRenderableBase, IRenderableIpso, IVisible, IWrapp
                         {
                             var function = variable.Value as ParameterizedLetterCustomizationCall;
 
-                            if(function != null)
+                            if(function?.Function != null)
                             {
                                 var response = function.Function(function.CharacterIndex, function.TextBlock);
 
@@ -1523,34 +1547,16 @@ public class Text : SpriteBatchRenderableBase, IRenderableIpso, IVisible, IWrapp
 
     #region IVisible Implementation
 
+    /// <inheritdoc/>
     public bool Visible
     {
         get;
         set;
     }
 
-    public bool AbsoluteVisible
-    {
-        get
-        {
-            if (((IVisible)this).Parent == null)
-            {
-                return Visible;
-            }
-            else
-            {
-                return Visible && ((IVisible)this).Parent.AbsoluteVisible;
-            }
-        }
-    }
-
-    IVisible IVisible.Parent
-    {
-        get
-        {
-            return ((IRenderableIpso)this).Parent as IVisible;
-        }
-    }
+    /// <inheritdoc/>
+    public bool AbsoluteVisible => ((IVisible)this).GetAbsoluteVisible();
+    IVisible? IVisible.Parent => ((IRenderableIpso)this).Parent as IVisible;
 
     #endregion
 

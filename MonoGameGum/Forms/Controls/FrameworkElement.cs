@@ -361,6 +361,7 @@ public class FrameworkElement : INotifyPropertyChanged
         set => Visual.MaxWidth = value;
     }
 
+    /// <inheritdoc cref="Gum.Wireframe.GraphicalUiElement.Anchor(Gum.Wireframe.Anchor)" />
     public void Anchor(Anchor anchor) => Visual.Anchor(anchor);
     public void Dock(Dock dock) => Visual.Dock(dock);
 
@@ -809,8 +810,8 @@ public class FrameworkElement : INotifyPropertyChanged
 #endif
     {
         var isOnThisOrChild =
-            cursor.WindowOver == this.Visual ||
-            (cursor.WindowOver != null && cursor.WindowOver.IsInParentChain(this.Visual));
+            cursor.VisualOver == this.Visual ||
+            (cursor.VisualOver != null && cursor.VisualOver.IsInParentChain(this.Visual));
 
         return isOnThisOrChild;
     }

@@ -13,7 +13,7 @@ public class TextBoxTests
     [Fact]
     public void Constructor_ShouldCreateV2Visual()
     {
-        var textBox = new Gum.Forms.Controls.TextBox();
+        TextBox textBox = new ();
         textBox.Visual.ShouldNotBeNull();
         (textBox.Visual is Gum.Forms.DefaultVisuals.TextBoxVisual).ShouldBeTrue();
     }
@@ -26,5 +26,13 @@ public class TextBoxTests
         textBox.Text = "Hello, this is a multiline text box. It has really long text. This should line wrap";
         textBox.SelectionStart = 0;
         textBox.SelectionLength = textBox.Text.Length;
+    }
+
+
+    [Fact]
+    public void Visual_HasEvents_ShouldBeTrue()
+    {
+        TextBox sut = new();
+        sut.Visual.HasEvents.ShouldBeTrue();
     }
 }

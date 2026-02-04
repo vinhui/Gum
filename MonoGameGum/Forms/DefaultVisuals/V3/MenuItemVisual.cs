@@ -47,7 +47,7 @@ public class MenuItemVisual : InteractiveGue
         get => _highlightedBackgroundColor;
         set
         {
-            if (value != _highlightedBackgroundColor)
+            if (!value.Equals(_highlightedBackgroundColor))
             {
                 // Just in case FormsControl hasn't been set yet, do ?. to check for null
                 // UpdateState forcefully applies the current state, so it will work regardless of whether this is
@@ -64,7 +64,7 @@ public class MenuItemVisual : InteractiveGue
         get => _selectedBackgroundColor;
         set
         {
-            if(value != _selectedBackgroundColor)
+            if(!value.Equals(_selectedBackgroundColor))
             {
                 _selectedBackgroundColor = value;
                 FormsControl?.UpdateState();
@@ -78,7 +78,7 @@ public class MenuItemVisual : InteractiveGue
         get => _foregroundColor;
         set
         {
-            if (value != _foregroundColor)
+            if (!value.Equals(_foregroundColor))
             {
                 // Just in case FormsControl hasn't been set yet, do ?. to check for null
                 // UpdateState forcefully applies the current state, so it will work regardless of whether this is
@@ -95,7 +95,7 @@ public class MenuItemVisual : InteractiveGue
         get => _submenuIndicatorColor;
         set
         {
-            if (value != _submenuIndicatorColor)
+            if (!value.Equals(_submenuIndicatorColor))
             {
                 // Just in case FormsControl hasn't been set yet, do ?. to check for null
                 // UpdateState forcefully applies the current state, so it will work regardless of whether this is
@@ -108,6 +108,7 @@ public class MenuItemVisual : InteractiveGue
 
     public MenuItemVisual(bool fullInstantiation = true, bool tryCreateFormsObject = true) : base(new InvisibleRenderable())
     {
+        this.HasEvents = true;
         X = 0;
         Y = 0;
         Width = 0;
@@ -143,6 +144,7 @@ public class MenuItemVisual : InteractiveGue
         ContainerInstance.HeightUnits = global::Gum.DataTypes.DimensionUnitType.RelativeToChildren;
         ContainerInstance.Width = 0f;
         ContainerInstance.WidthUnits = global::Gum.DataTypes.DimensionUnitType.RelativeToChildren;
+        ContainerInstance.HasEvents = false;
         this.AddChild(ContainerInstance);
 
         TextInstance = new TextRuntime();
@@ -259,5 +261,5 @@ public class MenuItemVisual : InteractiveGue
     Gum.Forms.VisualTemplate DefaultScrollVisualTemplate => new (() =>
                 new ScrollViewerVisualSizedToChildren(fullInstantiation: true, tryCreateFormsObject: false));
 
-    public MenuItem FormsControl => FormsControlAsObject as MenuItem;
+    public MenuItem FormsControl => (MenuItem)FormsControlAsObject;
 }

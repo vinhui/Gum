@@ -7,13 +7,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Xna.Framework;
 
 
 
 #if RAYLIB
 using Gum.GueDeriving;
+using Raylib_cs;
 #else
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using MonoGameGum.GueDeriving;
 #endif
@@ -47,7 +48,7 @@ public class ScrollViewerVisual : InteractiveGue
         get => _backgroundColor;
         set
         {
-            if(value != _backgroundColor)
+            if(!value.Equals(_backgroundColor))
             {
                 _backgroundColor = value;
                 Background.Color = _backgroundColor;
@@ -61,7 +62,7 @@ public class ScrollViewerVisual : InteractiveGue
         get => _focusedIndicatorColor;
         set
         {
-            if (value != _focusedIndicatorColor)
+            if (!value.Equals(_focusedIndicatorColor))
             {
                 _focusedIndicatorColor = value;
                 FocusedIndicator.Color = value;
@@ -91,6 +92,7 @@ public class ScrollViewerVisual : InteractiveGue
 
     public ScrollViewerVisual(bool fullInstantiation = true, bool tryCreateFormsObject = true) : base(new InvisibleRenderable())
     {
+        this.HasEvents = true;
         Width = 150;
         Height = 150;
 
@@ -318,5 +320,5 @@ public class ScrollViewerVisual : InteractiveGue
         }
     }
 
-    public ScrollViewer? FormsControl => this.FormsControlAsObject as ScrollViewer;
+    public ScrollViewer FormsControl => (ScrollViewer)this.FormsControlAsObject;
 }

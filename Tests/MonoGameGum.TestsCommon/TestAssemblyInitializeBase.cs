@@ -1,7 +1,9 @@
-﻿using Gum.Wireframe;
-using GumRuntime;
+﻿using Gum.Forms;
 using Gum.Forms.Controls;
+using Gum.Wireframe;
+using GumRuntime;
 using MonoGameGum.Renderables;
+using Moq;
 using RenderingLibrary;
 using RenderingLibrary.Content;
 using RenderingLibrary.Graphics;
@@ -38,7 +40,7 @@ public class TestAssemblyInitializeBase : XunitTestFramework
         ElementSaveExtensions.CustomCreateGraphicalComponentFunc = RenderableCreator.HandleCreateGraphicalComponent;
 
 
-        Gum.Forms.FormsUtilities.InitializeDefaults(defaultVisualsVersion: visualVersion);
+        FormsUtilities.InitializeDefaults(defaultVisualsVersion: visualVersion);
         CreateStubbedFonts();
 
         InitializeGumService();
@@ -52,7 +54,9 @@ public class TestAssemblyInitializeBase : XunitTestFramework
         Renderer.Self.Camera.ClientHeight = 600;
 
         GumService.Default.Root.UpdateLayout();
+
     }
+
 
     private void InitializeGumService()
     {
@@ -79,7 +83,7 @@ $"chars count=223\r\n";
         }
         fontPattern += stringBuilder.ToString();
 
-        var bitmapFont = new BitmapFont(fontTextureGraphic: null, fontPattern: fontPattern);
+        var bitmapFont = new BitmapFont(fontTextureGraphic: null!, fontPattern: fontPattern);
 
         // Since we don't have a Texture2D, the characters are set to null. Need to create them here:
         for (int i = 0; i < bitmapFont.Characters.Length; i++)

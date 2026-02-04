@@ -40,7 +40,7 @@ internal class CodeGenerationFileLocationsService
         }
         if(selectedElement != null)
         {
-            var elementName = selectedElement.Name;
+            var elementName = forcedElementName ?? selectedElement.Name;
 
             var effectiveVisualApi = visualApi;
 
@@ -54,7 +54,7 @@ internal class CodeGenerationFileLocationsService
                 var context = new CodeGenerationContext(_nameVerifier, selectedElement);
                 context.CodeOutputProjectSettings = codeOutputProjectSettings;
 
-                string? fileName = _codeGenerator.GetClassNameForType(selectedElement, effectiveVisualApi, context, out bool isPrefixed);
+                string? fileName = _codeGenerator.GetClassNameForType(elementName, selectedElement.GetType(), effectiveVisualApi, context, out bool isPrefixed);
                 if (isPrefixed) fileName = fileName?.Substring(1);
                 
                 var nameWithNamespaceArray = splitName.Take(splitName.Length - 1).Append(fileName);
@@ -74,7 +74,15 @@ internal class CodeGenerationFileLocationsService
             generatedFileName = ProjectState.Self.ProjectDirectory + generatedFileName;
         }
 
-        return generatedFileName;
+        // If it's empty, return null so it doesn't get used in code generation externally
+        if (string.IsNullOrEmpty(generatedFileName))
+        {
+            return null;
+        }
+        else
+        {
+            return generatedFileName;
+        }
     }
 
     public FilePath? GetCustomCodeFileName(ElementSave selectedElement, CodeOutputElementSettings elementSettings,

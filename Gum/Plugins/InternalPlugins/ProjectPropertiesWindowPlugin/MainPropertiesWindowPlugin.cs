@@ -45,6 +45,7 @@ class MainPropertiesWindowPlugin : InternalPlugin
     private readonly IDialogService _dialogService;
     private readonly IDispatcher _dispatcher;
     private readonly WireframeObjectManager _wireframeObjectManager;
+    private readonly FileWatchLogic _fileWatchLogic;
     private FilePath? _fontCharacterFileAbsolute;
 
     private PluginTab? _pluginTab;
@@ -56,6 +57,7 @@ class MainPropertiesWindowPlugin : InternalPlugin
         _dialogService = Locator.GetRequiredService<IDialogService>();
         _dispatcher = Locator.GetRequiredService<IDispatcher>();
         _wireframeObjectManager = Locator.GetRequiredService<WireframeObjectManager>();
+        _fileWatchLogic = Locator.GetRequiredService<FileWatchLogic>();
     }
 
     public override void StartUp()
@@ -101,19 +103,22 @@ class MainPropertiesWindowPlugin : InternalPlugin
                 _fontCharacterFileAbsolute = null;
             }
 
-            FileWatchLogic.Self.RefreshRootDirectory();
+            _fileWatchLogic.RefreshRootDirectory();
         }
     }
 
-    private void HandlePropertiesClicked(object sender, EventArgs e)
+    private void HandlePropertiesClicked(object? sender, EventArgs e)
     {
         try
         {
             viewModel.SetFrom(ProjectManager.Self.GeneralSettingsFile, ProjectState.Self.GumProjectSave);
             control.ViewModel = viewModel;
-            _pluginTab?.Show();
-            _pluginTab.CanClose = true;
-            _pluginTab.IsSelected = true;
+            if(_pluginTab != null)
+            {
+                _pluginTab.Show();
+                _pluginTab.CanClose = true;
+                _pluginTab.IsSelected = true;
+            }
             RefreshFontRangeEditability();
         }
         catch (Exception ex)
@@ -122,7 +127,7 @@ class MainPropertiesWindowPlugin : InternalPlugin
         }
     }
 
-    private async void HandlePropertyChanged(object sender, PropertyChangedEventArgs e)
+    private async void HandlePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         ////////////////////Early Out//////////////////
         if (viewModel.IsUpdatingFromModel)
@@ -298,7 +303,7 @@ class MainPropertiesWindowPlugin : InternalPlugin
             control.DataGrid.Refresh();
         }
     }
-    private void HandleCloseClicked(object sender, EventArgs e)
+    private void HandleCloseClicked(object? sender, EventArgs e)
     {
         _pluginTab?.Hide();
     }

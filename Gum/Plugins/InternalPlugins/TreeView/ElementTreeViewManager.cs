@@ -186,9 +186,9 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     /// <summary>
     /// Used to store off what was previously selected
     /// when the tree view refreshes itself - so the user
-    /// doesn't lose his selection.
+    /// doesn't lose the old selection.
     /// </summary>
-    object mRecordedSelectedObject;
+    object? mRecordedSelectedObject;
 
     System.Windows.Controls.TextBox searchTextBox;
     System.Windows.Controls.CheckBox deepSearchCheckBox;
@@ -286,6 +286,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     private readonly DeleteLogic _deleteLogic;
     private readonly IUndoManager _undoManager;
     private readonly WireframeObjectManager _wireframeObjectManager;
+    private readonly FileLocations _fileLocations;
 
     public bool HasMouseOver
     {
@@ -314,6 +315,8 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         _deleteLogic = Locator.GetRequiredService<DeleteLogic>();
         _undoManager = Locator.GetRequiredService<IUndoManager>();
         _wireframeObjectManager = Locator.GetRequiredService<WireframeObjectManager>();
+        _fileLocations = Locator.GetRequiredService<FileLocations>();
+
 
         TreeNodeExtensionMethods.ElementTreeViewManager = this;
         AddCursor = GetAddCursor();
@@ -1011,12 +1014,12 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         }
     }
 
-    private void ObjectTreeView_PreviewKeyDown(object sender, PreviewKeyDownEventArgs e)
+    private void ObjectTreeView_PreviewKeyDown(object? sender, PreviewKeyDownEventArgs e)
     {
         int m = 3;
     }
 
-    private void ObjectTreeView_KeyPress(object sender, KeyPressEventArgs e)
+    private void ObjectTreeView_KeyPress(object? sender, KeyPressEventArgs e)
     {
         _dragDropManager.HandleKeyPress(e);
     }
@@ -1099,9 +1102,9 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         foreach(var element in project.AllElements)
         {
             var rootDirectoryForElementType =
-                element is ScreenSave ? FileLocations.Self.ScreensFolder
-                : element is ComponentSave ? FileLocations.Self.ComponentsFolder
-                : element is StandardElementSave ? FileLocations.Self.StandardsFolder
+                element is ScreenSave ? _fileLocations.ScreensFolder
+                : element is ComponentSave ? _fileLocations.ComponentsFolder
+                : element is StandardElementSave ? _fileLocations.StandardsFolder
                 : string.Empty;
 
             string fullPath = rootDirectoryForElementType + FileManager.GetDirectory(element.Name);
@@ -1219,7 +1222,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             var treeNode = GetTreeNodeFor(screenSave);
             if (treeNode == null && ShouldShow(screenSave))
             {
-                string fullPath = FileLocations.Self.ScreensFolder + FileManager.GetDirectory(screenSave.Name);
+                string fullPath = _fileLocations.ScreensFolder + FileManager.GetDirectory(screenSave.Name);
                 TreeNode parentNode = GetTreeNodeFor(fullPath);
 
                 treeNode = AddTreeNodeForElement(screenSave, parentNode, ScreenImageIndex);
@@ -1230,7 +1233,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         {
             if (GetTreeNodeFor(componentSave) == null && ShouldShow(componentSave))
             {
-                string fullPath = FileLocations.Self.ComponentsFolder + FileManager.GetDirectory(componentSave.Name);
+                string fullPath = _fileLocations.ComponentsFolder + FileManager.GetDirectory(componentSave.Name);
                 TreeNode parentNode = GetTreeNodeFor(fullPath);
 
                 if(parentNode == null)
@@ -1257,11 +1260,11 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         {
             if(GetTreeNodeFor(behaviorSave) == null && ShouldShow(behaviorSave))
             {
-                string fullPath = FileLocations.Self.BehaviorsFolder;
+                string fullPath = _fileLocations.BehaviorsFolder;
                 
                 if(behaviorSave.Name != null)
                 {
-                    fullPath = FileLocations.Self.BehaviorsFolder + FileManager.GetDirectory(behaviorSave.Name);
+                    fullPath = _fileLocations.BehaviorsFolder + FileManager.GetDirectory(behaviorSave.Name);
                 }
                 TreeNode parentNode = GetTreeNodeFor(fullPath);
 
@@ -1481,17 +1484,10 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
     public void RecordSelection()
     {
-        mRecordedSelectedObject = _selectedState.SelectedInstance;
-
-        if (mRecordedSelectedObject == null)
-        {
-            mRecordedSelectedObject = _selectedState.SelectedElement;
-        }
-
-        if(mRecordedSelectedObject == null)
-        {
-            mRecordedSelectedObject = _selectedState.SelectedBehavior;
-        }
+        mRecordedSelectedObject = 
+            (object?)_selectedState.SelectedInstance ?? 
+            (object?)_selectedState.SelectedElement ??
+            (object?)_selectedState.SelectedBehavior;
     }
 
     public void SelectRecordedSelection()
@@ -1500,17 +1496,17 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         {
             if (mRecordedSelectedObject != null)
             {
-                if (mRecordedSelectedObject is InstanceSave)
+                if (mRecordedSelectedObject is InstanceSave instanceSave)
                 {
-                    _selectedState.SelectedInstance = mRecordedSelectedObject as InstanceSave;
+                    _selectedState.SelectedInstance = instanceSave;
                 }
-                else if (mRecordedSelectedObject is ElementSave)
+                else if (mRecordedSelectedObject is ElementSave elementSave)
                 {
-                    _selectedState.SelectedElement = mRecordedSelectedObject as ElementSave;
+                    _selectedState.SelectedElement = elementSave;
                 }
-                else if(mRecordedSelectedObject is BehaviorSave)
+                else if(mRecordedSelectedObject is BehaviorSave behaviorSave)
                 {
-                    _selectedState.SelectedBehavior = mRecordedSelectedObject as BehaviorSave;
+                    _selectedState.SelectedBehavior = behaviorSave;
                 }
             }
         }
@@ -1731,29 +1727,25 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             throw new ArgumentNullException(nameof(node));
         }
 
-        if (node.Tag is ElementSave)
+        if (node.Tag is ElementSave elementSave)
         {
-            ElementSave elementSave = node.Tag as ElementSave;
-
             RefreshElementTreeNode(node, elementSave);
         }
-        else if (node.Tag is InstanceSave)
+        else if (node.Tag is InstanceSave instanceSave)
         {
-            InstanceSave instanceSave = node.Tag as InstanceSave;
             // this if check improves speed quite a bit!
             if(instanceSave.Name != node.Text)
             {
                 node.Text = instanceSave.Name;
             }
         }
-        else if(node.Tag is BehaviorSave behaviorSave)
+        else if(node.Tag is BehaviorSave behavior)
         {
-            var behavior = node.Tag as BehaviorSave;
             if(behavior.Name != node.Text)
             {
                 node.Text = behavior.Name;
             }
-            RefreshBehaviorTreeNode(node, behaviorSave);
+            RefreshBehaviorTreeNode(node, behavior);
         }
 
         foreach (TreeNode treeNode in node.Nodes)
@@ -1782,11 +1774,11 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             string fullPath = null;
             if(elementSave is ScreenSave)
             {
-                fullPath = FileLocations.Self.ScreensFolder + FileManager.GetDirectory(elementSave.Name);
+                fullPath = _fileLocations.ScreensFolder + FileManager.GetDirectory(elementSave.Name);
             }
             else
             {
-                fullPath = FileLocations.Self.ComponentsFolder + FileManager.GetDirectory(elementSave.Name);
+                fullPath = _fileLocations.ComponentsFolder + FileManager.GetDirectory(elementSave.Name);
             }
             TreeNode desiredNode = GetTreeNodeFor(fullPath);
             var parentNode = node.Parent;
@@ -2032,11 +2024,11 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     }
 
     bool IsInUiInitiatedSelection = false;
-    internal void OnSelect(TreeNode selectedTreeNode)
+    internal void OnSelect(TreeNode? selectedTreeNode)
     {
-        TreeNode treeNode = ObjectTreeView.SelectedNode;
+        TreeNode? treeNode = ObjectTreeView.SelectedNode;
 
-        object selectedObject = null;
+        object? selectedObject = null;
 
         if (treeNode != null)
         {
@@ -2122,7 +2114,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
     }
 
-    private void ObjectTreeView_AfterSelect_1(object sender, TreeViewEventArgs e)
+    private void ObjectTreeView_AfterSelect_1(object? sender, TreeViewEventArgs e)
     {
         // If we use AfterClickSelect instead of AfterSelect then
         // we don't get notified when the user selects nothing.
@@ -2134,12 +2126,12 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         }
     }
 
-    private void ObjectTreeView_AfterClickSelect(object sender, TreeViewEventArgs e)
+    private void ObjectTreeView_AfterClickSelect(object? sender, TreeViewEventArgs e)
     {
         OnSelect(ObjectTreeView.SelectedNode);
     }
 
-    private void ObjectTreeView_MouseClick(object sender, MouseEventArgs e)
+    private void ObjectTreeView_MouseClick(object? sender, MouseEventArgs e)
     {
         if (e.Button == MouseButtons.Right)
         {
@@ -2149,7 +2141,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         }
     }
 
-    private void ObjectTreeView_KeyDown(object sender, KeyEventArgs e)
+    private void ObjectTreeView_KeyDown(object? sender, KeyEventArgs e)
     {
         HandleKeyDown(e);
     }
@@ -2189,62 +2181,66 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
         if (shouldExpand)
         {
-            var filterTextLower = filterText?.ToLower();
+
             FlatList.FlatList.Items.Clear();
 
-            var project = GumState.Self.ProjectState.GumProjectSave;
-            foreach (var screen in project.Screens)
+            if(filterText != null)
             {
-                if (screen.Name.ToLower().Contains(filterTextLower))
+                var filterTextLower = filterText.ToLower();
+                var project = GumState.Self.ProjectState.GumProjectSave;
+                foreach (var screen in project.Screens)
                 {
-                    AddToFlatList(screen);
-                }
-
-                if (deepSearchCheckBox.IsChecked is true)
-                {
-                    SearchInstanceVariables(screen, filterTextLower);
-                }
-            }
-            foreach (var component in project.Components)
-            {
-                if (component.Name.ToLower().Contains(filterTextLower))
-                {
-                    AddToFlatList(component);
-                }
-
-                foreach (var instance in component.Instances)
-                {
-                    if (instance.Name.ToLower().Contains(filterTextLower))
+                    if (screen.Name.ToLower().Contains(filterTextLower))
                     {
-                        AddToFlatList(instance, $"{component.Name}/{instance.Name} ({instance.BaseType})");
+                        AddToFlatList(screen);
+                    }
+
+                    if (deepSearchCheckBox.IsChecked is true)
+                    {
+                        SearchInstanceVariables(screen, filterTextLower);
+                    }
+                }
+                foreach (var component in project.Components)
+                {
+                    if (component.Name.ToLower().Contains(filterTextLower))
+                    {
+                        AddToFlatList(component);
+                    }
+
+                    foreach (var instance in component.Instances)
+                    {
+                        if (instance.Name.ToLower().Contains(filterTextLower))
+                        {
+                            AddToFlatList(instance, $"{component.Name}/{instance.Name} ({instance.BaseType})");
+                        }
+                    }
+
+                    if (deepSearchCheckBox.IsChecked is true)
+                    {
+                        SearchInstanceVariables(component, filterTextLower);
+                    }
+                }
+                foreach (var standard in project.StandardElements)
+                {
+                    if (standard.Name.ToLower().Contains(filterTextLower))
+                    {
+                        AddToFlatList(standard);
+                    }
+
+                    if (deepSearchCheckBox.IsChecked is true)
+                    {
+                        SearchInstanceVariables(standard, filterTextLower);
                     }
                 }
 
-                if (deepSearchCheckBox.IsChecked is true)
+                foreach(var behavior in project.Behaviors)
                 {
-                    SearchInstanceVariables(component, filterTextLower);
-                }
-            }
-            foreach (var standard in project.StandardElements)
-            {
-                if (standard.Name.ToLower().Contains(filterTextLower))
-                {
-                    AddToFlatList(standard);
-                }
-
-                if (deepSearchCheckBox.IsChecked is true)
-                {
-                    SearchInstanceVariables(standard, filterTextLower);
-                }
-            }
-
-            foreach(var behavior in project.Behaviors)
-            {
-                // Feb 5, 2025 - at some point a behavior with an empty name
-                // snuck into a FRB project. We shouldn't crash here because of it...
-                if(behavior.Name?.ToLower().Contains(filterTextLower) == true)
-                {
-                    AddToFlatList(behavior);
+                    // Feb 5, 2025 - at some point a behavior with an empty name
+                    // snuck into a FRB project. We shouldn't crash here because of it...
+                    if(behavior.Name?.ToLower().Contains(filterTextLower) == true)
+                    {
+                        AddToFlatList(behavior);
+                    }
                 }
             }
 
@@ -2406,8 +2402,8 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     {
         var objectOver = this.ObjectTreeView.GetNodeAt(x, y);
 
-        ElementSave element = null;
-        InstanceSave instance = null;
+        ElementSave? element = null;
+        InstanceSave? instance = null;
 
         if(objectOver != null && objectOver.Tag != null)
         {
@@ -2421,7 +2417,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             }
         }
 
-        GraphicalUiElement whatToHighlight = null;
+        GraphicalUiElement? whatToHighlight = null;
 
         if(element != null)
         {
@@ -2432,7 +2428,10 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             whatToHighlight = _wireframeObjectManager.GetRepresentation(instance, null);
         }
 
-        PluginManager.Self.SetHighlightedIpso(whatToHighlight);
+        if(PluginManager.Self.IsInitialized)
+        {
+            PluginManager.Self.SetHighlightedIpso(whatToHighlight);
+        }
     }
 
     void IRecipient<ApplicationStartupMessage>.Receive(ApplicationStartupMessage message)
@@ -2585,7 +2584,7 @@ public static class TreeNodeExtensionMethods
     /// </summary>
     /// <param name="treeNode">The tree node</param>
     /// <returns>Whether this is a folder inside the screens folder structure</returns>
-    public static bool IsScreensFolderTreeNode(this ITreeNode treeNode) =>
+    public static bool IsScreensFolderTreeNode(this ITreeNode? treeNode) =>
         treeNode is TreeNodeWrapper wrapper
         ? wrapper.Node.IsScreensFolderTreeNode()
         : false;
@@ -2645,7 +2644,7 @@ public static class TreeNodeExtensionMethods
     /// </summary>
     /// <param name="treeNode">The tree node</param>
     /// <returns>Whether this is a folder inside the screens folder structure</returns>
-    public static bool IsComponentsFolderTreeNode(this ITreeNode treeNode) =>
+    public static bool IsComponentsFolderTreeNode(this ITreeNode? treeNode) =>
         treeNode is TreeNodeWrapper wrapper
         ? wrapper.Node.IsComponentsFolderTreeNode()
         : false;

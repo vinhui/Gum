@@ -32,7 +32,7 @@ public class MenuVisual : InteractiveGue
         get => _backgroundColor;
         set
         {
-            if (value != _backgroundColor)
+            if (!value.Equals(_backgroundColor))
             {
                 // Just in case FormsControl hasn't been set yet, do ?. to check for null
                 // UpdateState forcefully applies the current state, so it will work regardless of whether this is
@@ -49,6 +49,7 @@ public class MenuVisual : InteractiveGue
 
     public MenuVisual(bool fullInstantiation = true, bool tryCreateFormsObject = true) : base(new InvisibleRenderable())
     {
+        this.HasEvents = true;
         X = 0;
         XUnits = GeneralUnitType.PixelsFromMiddle;
         Y = 0;
@@ -107,5 +108,5 @@ public class MenuVisual : InteractiveGue
         }
     }
 
-    public Menu FormsControl => FormsControlAsObject as Menu;
+    public Menu FormsControl => (Menu)FormsControlAsObject;
 }

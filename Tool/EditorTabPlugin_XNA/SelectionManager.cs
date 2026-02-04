@@ -8,6 +8,7 @@ using Gum.Services.Dialogs;
 using Gum.ToolStates;
 using Gum.Undo;
 using Gum.Wireframe.Editors;
+using HarfBuzzSharp;
 using RenderingLibrary;
 using RenderingLibrary.Graphics;
 using RenderingLibrary.Math.Geometry;
@@ -49,10 +50,10 @@ public class SelectionManager
 
     LayerService _layerService;
 
-    public WireframeEditor WireframeEditor;
+    public WireframeEditor? WireframeEditor;
 
     List<GraphicalUiElement> mSelectedIpsos = new List<GraphicalUiElement>();
-    IPositionedSizedObject mHighlightedIpso;
+    IPositionedSizedObject? mHighlightedIpso;
 
     GraphicalOutline mGraphicalOutline;
 
@@ -126,7 +127,7 @@ public class SelectionManager
         }
     }
 
-    public IPositionedSizedObject HighlightedIpso
+    public IPositionedSizedObject? HighlightedIpso
     {
         get
         {
@@ -263,9 +264,9 @@ public class SelectionManager
         }
     }
 
-    public void LateActivity()
+    public void LateActivity(SystemManagers systemManagers)
     {
-        WireframeEditor?.Activity(SelectedGues);
+        WireframeEditor?.Activity(SelectedGues, systemManagers);
     }
 
     public void Deselect()
@@ -599,28 +600,28 @@ public class SelectionManager
                 isVisible = false;
             }
         }
-        else if (ipso is IVisible)
+        else if (ipso is IVisible asIVisible)
         {
-            isVisible = ((IVisible)ipso).AbsoluteVisible;
+            isVisible = (asIVisible).AbsoluteVisible;
         }
-        else if (ipso is Sprite)
+        else if (ipso is Sprite asSprite)
         {
-            isVisible = ((Sprite)ipso).AbsoluteVisible;
+            isVisible = (asSprite).AbsoluteVisible;
         }
-        else if (ipso is Text)
+        else if (ipso is Text asText)
         {
-            isVisible = ((Text)ipso).AbsoluteVisible;
+            isVisible = (asText).AbsoluteVisible;
         }
 
         return isVisible;
     }
 
-    List<GraphicalUiElement> emptyGraphicalUiElementList = new List<GraphicalUiElement>();
+    List<GraphicalUiElement> _emptyGraphicalUiElementList = new List<GraphicalUiElement>();
     private void UpdateEditorsToSelection()
     {
         if (SelectedGues.Count == 1 &&
-            SelectedGue?.Tag is InstanceSave &&
-            ((InstanceSave)SelectedGue.Tag).BaseType == "Polygon")
+            SelectedGue?.Tag is InstanceSave instanceSaveTag &&
+            ObjectFinder.Self.GetRootStandardElementSave(instanceSaveTag)?.Name == "Polygon")
         {
             // use the Polygon wireframe editor
             if (WireframeEditor is PolygonWireframeEditor == false)
@@ -629,11 +630,7 @@ public class SelectionManager
                 {
                     WireframeEditor.Destroy();
                 }
-                WireframeEditor = new PolygonWireframeEditor(
-                    _layerService.OverlayLayer,
-                    _hotkeyManager,
-                    this,
-                    _selectedState);
+                CreatePolygonWireframeEditor();
             }
         }
         else if (SelectedGues.Count > 0 && SelectedGue?.Tag is ScreenSave == false)
@@ -652,11 +649,7 @@ public class SelectionManager
                 {
                     WireframeEditor.Destroy();
                 }
-                WireframeEditor = new PolygonWireframeEditor(
-                    _layerService.OverlayLayer,
-                    _hotkeyManager,
-                    this,
-                    _selectedState);
+                CreatePolygonWireframeEditor();
             }
             else
             {
@@ -688,10 +681,7 @@ public class SelectionManager
         }
         else if (WireframeEditor != null)
         {
-            if (WireframeEditor != null)
-            {
-                WireframeEditor.Destroy();
-            }
+            WireframeEditor.Destroy();
             WireframeEditor = null;
         }
 
@@ -699,7 +689,7 @@ public class SelectionManager
         {
             if (_selectedState.CustomCurrentStateSave != null)
             {
-                WireframeEditor.UpdateToSelection(emptyGraphicalUiElementList);
+                WireframeEditor.UpdateToSelection(_emptyGraphicalUiElementList);
             }
             else
             {
@@ -707,6 +697,15 @@ public class SelectionManager
             }
             WireframeEditor.RestrictToUnitValues = RestrictToUnitValues;
         }
+    }
+
+    private void CreatePolygonWireframeEditor()
+    {
+        WireframeEditor = new PolygonWireframeEditor(
+            _layerService.OverlayLayer,
+            _hotkeyManager,
+            this,
+            _selectedState);
     }
 
     void SelectionActivity()

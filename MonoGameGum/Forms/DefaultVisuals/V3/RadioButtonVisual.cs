@@ -60,7 +60,7 @@ public class RadioButtonVisual : InteractiveGue
         get => _backgroundColor;
         set
         {
-            if (value != _backgroundColor)
+            if (!value.Equals(_backgroundColor))
             {
                 // Just in case FormsControl hasn't been set yet, do ?. to check for null
                 // UpdateState forcefully applies the current state, so it will work regardless of whether this is
@@ -76,7 +76,7 @@ public class RadioButtonVisual : InteractiveGue
         get => _foregroundColor;
         set
         {
-            if (value != _foregroundColor)
+            if (!value.Equals(_foregroundColor))
             {
                 // Just in case FormsControl hasn't been set yet, do ?. to check for null
                 // UpdateState forcefully applies the current state, so it will work regardless of whether this is
@@ -93,7 +93,7 @@ public class RadioButtonVisual : InteractiveGue
         get => _radioColor;
         set
         {
-            if (value != _radioColor)
+            if (!value.Equals(_radioColor))
             {
                 // Just in case FormsControl hasn't been set yet, do ?. to check for null
                 // UpdateState forcefully applies the current state, so it will work regardless of whether this is
@@ -110,7 +110,7 @@ public class RadioButtonVisual : InteractiveGue
         get => _focusedIndicatorColor;
         set
         {
-            if (value != _focusedIndicatorColor)
+            if (!value.Equals(_focusedIndicatorColor))
             {
                 _focusedIndicatorColor = value;
                 FormsControl?.UpdateState();
@@ -120,6 +120,7 @@ public class RadioButtonVisual : InteractiveGue
 
     public RadioButtonVisual(bool fullInstantiation = true, bool tryCreateFormsObject = true) : base(new InvisibleRenderable())
     {
+        this.HasEvents = true;
         Width = 128;
         Height = 24;
 
@@ -315,5 +316,5 @@ public class RadioButtonVisual : InteractiveGue
 
     }
 
-    public RadioButton FormsControl => FormsControlAsObject as RadioButton;
+    public RadioButton FormsControl => (RadioButton)FormsControlAsObject;
 }

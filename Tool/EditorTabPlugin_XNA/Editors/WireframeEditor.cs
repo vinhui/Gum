@@ -79,10 +79,10 @@ public abstract class WireframeEditor
             _selectedState.SelectedIpso != null
             )
         {
-            IPositionedSizedObject ipso = _selectedState.SelectedIpso;
+            var ipso = (GraphicalUiElement)_selectedState.SelectedIpso;
 
-            float width = ipso.Width;
-            float height = ipso.Height;
+            float width = ipso.GetAbsoluteWidth();
+            float height = ipso.GetAbsoluteHeight();
 
             if (height != 0)
             {
@@ -91,7 +91,7 @@ public abstract class WireframeEditor
         }
     }
 
-    public abstract void Activity(ICollection<GraphicalUiElement> selectedObjects);
+    public abstract void Activity(ICollection<GraphicalUiElement> selectedObjects, SystemManagers systemManagers);
 
     public abstract System.Windows.Forms.Cursor GetWindowsCursorToShow(
         System.Windows.Forms.Cursor defaultCursor, float worldXAt, float worldYAt);

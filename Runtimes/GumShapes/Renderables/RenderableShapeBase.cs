@@ -377,9 +377,6 @@ public abstract class RenderableShapeBase : RenderableBase
 
     #endregion
 
-
-
-
     bool _isFilled = true;
     public bool IsFilled
     {
@@ -481,11 +478,15 @@ public abstract class RenderableShapeBase : RenderableBase
         {
             var effectiveGradientX2 = effectiveGradientX1 + _gradientOuterRadius;
             var effectiveGradientY2 = effectiveGradientY1;
+
+            float aOffset = this.GradientInnerRadius;
+            
             return new Gradient(new Vector2(effectiveGradientX1, effectiveGradientY1), 
                 firstColor,
                 new Vector2(effectiveGradientX2, effectiveGradientY2),
                 secondColor,
-                s:Gradient.Shape.Radial);
+                s:Gradient.Shape.Radial,
+                aOffset:aOffset);
         }
 
         // todo - eventually support rotation
@@ -511,6 +512,12 @@ public abstract class RenderableShapeBase : RenderableBase
     public override void StartBatch(ISystemManagers systemManagers)
     {
         var sb = ShapeRenderer.ShapeBatch;
+        if(sb == null)
+        {
+            throw new InvalidOperationException(
+                "ShapeRenderer is null - did you remember to call ShapeRenderer.Self.Initialize()? " +
+                "For more information see documentation: https://docs.flatredball.com/gum/code/standard-visuals/shapes-apos.shapes#monogame");
+        }
         sb.Begin();
     }
 
