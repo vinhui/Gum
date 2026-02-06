@@ -83,23 +83,26 @@ file static class ServiceCollectionExtensions
         // static singletons
         services.AddSingleton<IObjectFinder>(ObjectFinder.Self);
         services.AddSingleton<PluginManager>(PluginManager.Self);
+        services.AddSingleton<IPluginManager>(provider => provider.GetRequiredService<PluginManager>());
         services.AddSingleton<TypeManager>(TypeManager.Self);
         // We can do this once we get rid of usages of ProjectManager.Self because we have to inject. Until then, we can't do this.
         //services.AddSingleton<ProjectManager>(ProjectManager.Self);
 
         // singletons
-        services.AddSingleton<ISelectedState, SelectedState>();
-        services.AddSingleton<LocalizationManager>();
-        services.AddSingleton<INameVerifier, NameVerifier>();
-        services.AddSingleton<IUndoManager, UndoManager>();
-        services.AddSingleton<DeleteLogic>();
+        services.AddSingleton<CircularReferenceManager>();
         services.AddSingleton<CopyPasteLogic>();
+        services.AddSingleton<DeleteLogic>();
+        services.AddSingleton<FileLocations>();
+        services.AddSingleton<FileWatchLogic>();
         services.AddSingleton<FontManager>();
         services.AddSingleton<HotkeyManager>();
+        services.AddSingleton<LocalizationManager>();
+        services.AddSingleton<ISelectedState, SelectedState>();
+        services.AddSingleton<INameVerifier, NameVerifier>();
+        services.AddSingleton<IUndoManager, UndoManager>();
         services.AddSingleton<IEditVariableService, EditVariableService>();
         services.AddSingleton<IDeleteVariableService, DeleteVariableService>();
         services.AddSingleton<IExposeVariableService, ExposeVariableService>();
-        services.AddSingleton<CircularReferenceManager>();
         services.AddSingleton<DragDropManager>();
         services.AddSingleton<MenuStripManager>();
         services.AddSingleton<ImportLogic>();

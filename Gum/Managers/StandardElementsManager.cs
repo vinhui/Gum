@@ -166,6 +166,14 @@ namespace Gum.Managers
                 stateSave.Variables.Add(new VariableSave { SetsValue = true, Type = nameof(TextOverflowVerticalMode), Value = TextOverflowVerticalMode.SpillOver, Name = nameof(TextOverflowVerticalMode), Category = "Text" });
                 stateSave.Variables.Add(new VariableSave { SetsValue = true, Type = nameof(TextOverflowHorizontalMode), Value = TextOverflowHorizontalMode.TruncateWord, Name = nameof(TextOverflowHorizontalMode), Category = "Text" });
 
+                var lineHeightMultiplierVariable =
+                    new VariableSave { SetsValue = true, Type = "float", Value = 1.0f, Name = "LineHeightMultiplier", Category = "Text" };
+                // should this go in a plugin?
+                lineHeightMultiplierVariable.PropertiesToSetOnDisplayer["LabelDragChangeMultiplier"] = .02m;
+                lineHeightMultiplierVariable.PropertiesToSetOnDisplayer["LabelDragValueRounding"] = .01m;
+                
+                stateSave.Variables.Add(lineHeightMultiplierVariable);
+
                 // font:
                 stateSave.Variables.Add(new VariableSave { SetsValue = true, Type = "bool", Value = false, Name = "UseCustomFont", Category = "Font" });
 
@@ -416,7 +424,15 @@ namespace Gum.Managers
                 var stateSave = new StateSave();
                 stateSave.Name = "Default";
 
-                AddPositioningVariables(stateSave, addOriginVariables: false);
+                // January 1, 2026
+                // Modifying this to
+                // include origin variables
+                // because they can be set using
+                // dock/anchor anyway, so we might
+                // as well have them available in the
+                // UI
+                //AddPositioningVariables(stateSave, addOriginVariables: false);
+                AddPositioningVariables(stateSave, addOriginVariables: true);
 
                 stateSave.Variables.Add(new VariableSave { SetsValue = true, Type = "bool", Value = true, Name = "Visible", Category = "States and Visibility" });
                 AddColorVariables(stateSave, true);
@@ -426,12 +442,12 @@ namespace Gum.Managers
                 var pointsVariable = new VariableListSave<Vector2>()
                 { Name = "Points", Category = "Points" , Type = "Vector2"};
 
-                pointsVariable.Value.Add(new Vector2(-32, -32));
-                pointsVariable.Value.Add(new Vector2(32, -32));
+                pointsVariable.Value.Add(new Vector2(0, 0));
+                pointsVariable.Value.Add(new Vector2(32, 0));
                 pointsVariable.Value.Add(new Vector2(32, 32));
-                pointsVariable.Value.Add(new Vector2(-32, 32));
+                pointsVariable.Value.Add(new Vector2(0, 32));
                 // close it:
-                pointsVariable.Value.Add(new Vector2(-32, -32));
+                pointsVariable.Value.Add(new Vector2(0, 0));
 
                 stateSave.VariableLists.Add(pointsVariable);
 
@@ -453,6 +469,15 @@ namespace Gum.Managers
                 stateSave.Name = "Default";
                 AddPositioningVariables(stateSave);
                 AddDimensionsVariables(stateSave, 64, 64, DimensionVariableAction.AllowFileOptions);
+
+                var borderScaleVariable =
+                    new VariableSave { SetsValue = true, Type = "float", Value = 1f, Name = "BorderScale", Category = "Dimensions" };
+                borderScaleVariable.PropertiesToSetOnDisplayer["LabelDragChangeMultiplier"] = .02m;
+                borderScaleVariable.PropertiesToSetOnDisplayer["LabelDragValueRounding"] = .01m;
+
+                stateSave.Variables.Add(borderScaleVariable);
+
+
                 stateSave.Variables.Add(new VariableSave { SetsValue = true, Type = "string", Value = "", Name = "SourceFile", IsFile = true, Category = "Source" });
                 stateSave.Variables.Add(new VariableSave { SetsValue = true, Type = "bool", Value = true, Name = "Visible", Category = "States and Visibility" });
 
@@ -477,6 +502,7 @@ namespace Gum.Managers
                 stateSave.Variables.Add(new VariableSave { SetsValue = true, Type = "int", Value = 0, Name = "TextureHeight", Category = "Source" });
 
                 stateSave.Variables.Add(new VariableSave { SetsValue = true, Type = "float?", Value = null, Name = "CustomFrameTextureCoordinateWidth", Category = "Source" });
+
 
                 AddVariableReferenceList(stateSave);
 
@@ -810,8 +836,14 @@ namespace Gum.Managers
 
                 if (customState == null && throwExceptionOnMissing)
                 {
-                    throw new InvalidOperationException(
-                        $"Could not get the default state for type {type} in either the default or through plugins");
+                    var message = $"Could not get the default state for type {type} in either the default or through plugins";
+
+                    if(type == "Arc")
+                    {
+                        message += "\nIf using MonoGame/KNI, FNA, did you remember to initialize the shapes library?";
+                    }
+
+                    throw new InvalidOperationException(message);
                 }
                 else
                 {

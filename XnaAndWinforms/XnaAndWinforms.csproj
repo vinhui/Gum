@@ -10,7 +10,9 @@
 		<CodeAnalysisIgnoreBuiltInRuleSets>true</CodeAnalysisIgnoreBuiltInRuleSets>
 		<LangVersion>12.0</LangVersion>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<Nullable>enable</Nullable>
 		<EnableWindowsTargeting>true</EnableWindowsTargeting>
+
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="nkast.Xna.Framework" Version="4.1.9001" />

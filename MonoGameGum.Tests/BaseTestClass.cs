@@ -13,6 +13,9 @@ public class BaseTestClass : IDisposable
 {
     public virtual void Dispose()
     {
+        GraphicalUiElement.CanvasWidth = 800;
+        GraphicalUiElement.CanvasHeight = 600;
+
         FrameworkElement.KeyboardsForUiControl.Clear();
         FrameworkElement.ClickCombos.Clear();
         FrameworkElement.ClickCombos.Add(new KeyCombo
@@ -56,6 +59,12 @@ public class BaseTestClass : IDisposable
 
         CustomSetPropertyOnRenderable.LocalizationService = null;
 
+        RenderingLibrary.Content.LoaderManager.Self.CacheTextures = false;
+        RenderingLibrary.Content.LoaderManager.Self.CacheTextures = true;
+
         FileManager.CustomGetStreamFromFile = null;
+
+        GraphicalUiElement.GlobalFontScale = 1;
+        RenderingLibrary.Graphics.Text.Customizations.Clear();
     }
 }

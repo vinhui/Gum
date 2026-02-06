@@ -1,7 +1,10 @@
-﻿using Gum.Renderables;
+﻿#if MONOGAME || KNI || XNA4 || FNA
+#define XNALIKE
+#endif
+using Gum.DataTypes;
+using Gum.Renderables;
 using Gum.Renderables;
 using Gum.Wireframe;
-using Raylib_cs;
 using RenderingLibrary;
 using RenderingLibrary.Graphics;
 using System;
@@ -10,7 +13,16 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+#if RAYLIB
+using Raylib_cs;
 namespace Gum.GueDeriving;
+#else
+namespace MonoGameGum.GueDeriving;
+#endif
+
+/// <summary>
+/// A visual text element which can display a string.
+/// </summary>
 public class TextRuntime : InteractiveGue
 {
     Text mContainedText;
@@ -26,44 +38,148 @@ public class TextRuntime : InteractiveGue
         }
     }
 
+#if !RAYLIB && !SKIA
+    /// <summary>
+    /// The XNA blend state used when rendering the text. This controls how 
+    /// color and alpha values blend with the background.
+    /// </summary>
+    public Microsoft.Xna.Framework.Graphics.BlendState BlendState
+    {
+        get => ContainedText.BlendState.ToXNA();
+        set
+        {
+            ContainedText.BlendState = value.ToGum();
+            NotifyPropertyChanged();
+            NotifyPropertyChanged(nameof(Blend));
+        }
+    }
+
+    public Gum.RenderingLibrary.Blend Blend
+    {
+        get
+        {
+            return Gum.RenderingLibrary.BlendExtensions.ToBlend(ContainedText.BlendState);
+        }
+        set
+        {
+            BlendState = value.ToBlendState().ToXNA();
+            // NotifyPropertyChanged handled by BlendState:
+        }
+    }
+#endif
+
+    /// <summary>
+    /// The red component of the text color. Ranges from 0 to 255.
+    /// </summary>
+    public int Red
+    {
+        get => ContainedText.Red;
+        set => ContainedText.Red = value;
+    }
+
+    /// <summary>
+    /// The green component of the text color. Ranges from 0 to 255.
+    /// </summary>
+    public int Green
+    {
+        get => ContainedText.Green;
+        set => ContainedText.Green = value;
+    }
+
+    /// <summary>
+    /// The blue component of the text color. Ranges from 0 to 255.
+    /// </summary>
+    public int Blue
+    {
+        get => ContainedText.Blue;
+        set => ContainedText.Blue = value;
+    }
+
+    /// <summary>
+    /// The alpha (opacity) component of the text color. Ranges from 0 (fully transparent) to 255 (fully opaque).
+    /// </summary>
+    public int Alpha
+    {
+        get => ContainedText.Alpha;
+        set => ContainedText.Alpha = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the color used to render the text. This includes color and alpha (opacity) components.
+    /// </summary>
+    public Color Color
+    {
+#if XNALIKE
+        get => RenderingLibrary.Graphics.XNAExtensions.ToXNA(ContainedText.Color);
+        set
+        {
+            ContainedText.Color = RenderingLibrary.Graphics.XNAExtensions.ToSystemDrawing(value);
+            NotifyPropertyChanged();
+        }
+#else
+        get => ContainedText.Color;
+        set
+        {
+            ContainedText.Color = value;
+            NotifyPropertyChanged();
+        }
+#endif
+    }
+
+    /// <summary>
+    /// The horizontal alignment of the text within its bounding box.
+    /// </summary>
+    public HorizontalAlignment HorizontalAlignment
+    {
+        get => ContainedText.HorizontalAlignment;
+        set => ContainedText.HorizontalAlignment = value;
+    }
+
+    /// <summary>
+    /// The vertical alignment of the text within its bounding box.
+    /// </summary>
+    public VerticalAlignment VerticalAlignment
+    {
+        get => ContainedText.VerticalAlignment;
+        set => ContainedText.VerticalAlignment = value;
+    }
+
+#if !RAYLIB && !SKIA
+    /// <summary>
+    /// The maximum letters to display. This can be used to 
+    /// create an effect where the text prints out letter-by-letter.
+    /// </summary>
+    public int? MaxLettersToShow
+    {
+        get => mContainedText.MaxLettersToShow;
+        set
+        {
+            mContainedText.MaxLettersToShow = value;
+        }
+    }
+#endif
+
+
+#if !RAYLIB
+    /// <summary>
+    /// The maximum number of lines to display. This can be used to 
+    /// limit how many lines of text are displayed at one time.
+    /// </summary>
+    public int? MaxNumberOfLines
+    {
+        get => mContainedText.MaxNumberOfLines;
+        set
+        {
+            mContainedText.MaxNumberOfLines = value;
+        }
+    }
+#endif
+
     public Font CustomFont
     {
         get => ContainedText.Font;
 
         set => ContainedText.Font = value;
-    }
-
-    public string Text
-    {
-        get
-        {
-            return ContainedText.RawText;
-        }
-        set
-        {
-            var widthBefore = ContainedText.WrappedTextWidth;
-            var heightBefore = ContainedText.WrappedTextHeight;
-            if (this.WidthUnits == Gum.DataTypes.DimensionUnitType.RelativeToChildren)
-            {
-                // make it have no line wrap width before assignign the text:
-
-                // todo - Vic needs to fix this up!
-                //ContainedText.Width = null;
-            }
-
-            // Use SetProperty so it goes through the BBCode-checking methods
-            //ContainedText.RawText = value;
-            this.SetProperty("Text", value);
-
-            NotifyPropertyChanged();
-            var shouldUpdate = widthBefore != ContainedText.WrappedTextWidth || heightBefore != ContainedText.WrappedTextHeight;
-            if (shouldUpdate)
-            {
-                UpdateLayout(
-                    Gum.Wireframe.GraphicalUiElement.ParentUpdateType.IfParentWidthHeightDependOnChildren |
-                    Gum.Wireframe.GraphicalUiElement.ParentUpdateType.IfParentStacks, int.MaxValue / 2);
-            }
-        }
     }
 
     public float FontScale
@@ -158,27 +274,63 @@ public class TextRuntime : InteractiveGue
         set { outlineThickness = value; UpdateToFontValues(); }
     }
 
-    public HorizontalAlignment HorizontalAlignment
+    /// <summary>
+    /// Gets or sets the raw text content displayed by the control. This is the value before line wrapping and bbcode parsing has been applied.
+    /// </summary>
+    /// <remarks>Setting this property updates the displayed text and may trigger layout changes if the text
+    /// size affects the control's dimensions. If the control's width is set relative to its children and no maximum
+    /// width is specified, the text will not be line-wrapped.</remarks>
+    public string? Text
     {
-        get => ContainedText.HorizontalAlignment;
-        set => ContainedText.HorizontalAlignment = value;
-    }
-
-    public VerticalAlignment VerticalAlignment
-    {
-        get => ContainedText.VerticalAlignment;
-        set => ContainedText.VerticalAlignment = value;
-    }
-
-    public Color Color
-    {
-        get => ContainedText.Color;
+        get
+        {
+            return ContainedText.RawText;
+        }
         set
         {
-            ContainedText.Color = value;
+            var widthBefore = ContainedText.WrappedTextWidth;
+            var heightBefore = ContainedText.WrappedTextHeight;
+            if (this.WidthUnits == Gum.DataTypes.DimensionUnitType.RelativeToChildren)
+            {
+                if (this.MaxWidth == null)
+                {
+                    // make it have no line wrap width before assignign the text:
+                    ContainedText.Width = null;
+                }
+                else
+                {
+                    ContainedText.Width = this.MaxWidth;
+                }
+            }
+
+            // Use SetProperty so it goes through the BBCode-checking methods
+            //ContainedText.RawText = value;
+            this.SetProperty("Text", value);
+
             NotifyPropertyChanged();
+            var shouldUpdate = widthBefore != ContainedText.WrappedTextWidth || heightBefore != ContainedText.WrappedTextHeight;
+            if (shouldUpdate)
+            {
+                UpdateLayout(
+                    Gum.Wireframe.GraphicalUiElement.ParentUpdateType.IfParentWidthHeightDependOnChildren |
+                    Gum.Wireframe.GraphicalUiElement.ParentUpdateType.IfParentStacks, int.MaxValue / 2);
+            }
         }
     }
+
+    #region Defaults
+
+    // todo - add more here
+    //public static string DefaultFont = "Arial";
+    //public static int DefaultFontSize = 18;
+
+    public float DefaultWidth = 0;
+    public float DefaultHeight = 0;
+
+    public DimensionUnitType DefaultWidthUnits = DimensionUnitType.RelativeToChildren;
+    public DimensionUnitType DefaultHeightUnits = DimensionUnitType.RelativeToChildren;
+
+    #endregion
 
     public TextRuntime(bool fullInstantiation = true, SystemManagers? systemManagers = null)
     {
@@ -189,16 +341,29 @@ public class TextRuntime : InteractiveGue
 
             SetContainedObject(textRenderable);
 
-            //Width = DefaultWidth;
-            //WidthUnits = DefaultWidthUnits;
-            //Height = DefaultHeight;
-            //HeightUnits = DefaultHeightUnits;
+            Width = DefaultWidth;
+            WidthUnits = DefaultWidthUnits;
+            Height = DefaultHeight;
+            HeightUnits = DefaultHeightUnits;
             //this.FontSize = DefaultFontSize;
             //this.Font = DefaultFont;
-            //HasEvents = false;
+            HasEvents = false;
 
             textRenderable.RawText = "Hello World";
         }
     }
 
+#if !RAYLIB
+    // We should phase this out, so not adding it to raylib. Instead, add to root
+    public void AddToManagers() => base.AddToManagers(SystemManagers.Default, layer:null);
+#endif
+
+    /// <summary>
+    /// Returns the index of the character at the specified screen position. This returns the index
+    /// within the WrappedText, so to index in, you need to loop through each line.
+    /// </summary>
+    /// <param name="screenX">The screen x position, usually obtained by Cursor.XRespectingGumZoomAndBounds()</param>
+    /// <param name="screenY">The screen y position, usually obtained by Cursor.YRespectingGumZoomAndBounds()</param>
+    /// <returns>The index in the WrappedText</returns>
+    public int GetCharacterIndexAtPosition(float screenX, float screenY) => ContainedText.GetCharacterIndexAtPosition(screenX, screenY);
 }

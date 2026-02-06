@@ -1,5 +1,4 @@
 ﻿using Gum.Wireframe;
-using Microsoft.Xna.Framework.Input;
 using RenderingLibrary;
 using System;
 using System.Collections.Generic;
@@ -8,20 +7,25 @@ using System.ComponentModel;
 using Gum.DataTypes.Variables;
 using System.Linq;
 
-
-
-
-
 #if FRB
+using Microsoft.Xna.Framework.Input;
 using MonoGameGum.Forms.Controls;
 using FlatRedBall.Forms.Input;
 using FlatRedBall.Gui;
 using FlatRedBall.Input;
 using InteractiveGue = global::Gum.Wireframe.GraphicalUiElement;
-using Buttons = FlatRedBall.Input.Xbox360GamePad.Button;
+using GamepadButton = FlatRedBall.Input.Xbox360GamePad.Button;
+using RenderingLibrary.Graphics;
 namespace FlatRedBall.Forms.Controls;
+#elif RAYLIB
+using RaylibGum.Input;
+using Keys = Raylib_cs.KeyboardKey;
+using Gum.Renderables;
 #else
+using Microsoft.Xna.Framework.Input;
+using RenderingLibrary.Graphics;
 using MonoGameGum.Input;
+using GamepadButton = Microsoft.Xna.Framework.Input.Buttons;
 #endif
 
 #if !FRB
@@ -67,11 +71,11 @@ public abstract class TextBoxBase :
     }
 
     protected GraphicalUiElement textComponent;
-    protected global::RenderingLibrary.Graphics.Text coreTextObject;
+    protected Text coreTextObject;
 
 
     protected GraphicalUiElement placeholderComponent;
-    protected global::RenderingLibrary.Graphics.Text placeholderTextObject;
+    protected Text placeholderTextObject;
 
     protected GraphicalUiElement selectionInstance;
 
@@ -254,7 +258,7 @@ public abstract class TextBoxBase :
 
     #region Events
 
-    public event Action<Buttons> ControllerButtonPushed;
+    public event Action<GamepadButton> ControllerButtonPushed;
     public event Action<object, TextCompositionEventArgs> PreviewTextInput;
     public event EventHandler CaretIndexChanged;
     protected void RaiseCaretIndexChanged() => CaretIndexChanged?.Invoke(this, EventArgs.Empty);
@@ -307,7 +311,10 @@ public abstract class TextBoxBase :
 #endif
         Visual.SizeChanged += HandleVisualSizeChanged;
 
-        this.textComponent.PropertyChanged += HandleTextComponentPropertyChanged;
+        if(textComponent != null)
+        {
+            this.textComponent.PropertyChanged += HandleTextComponentPropertyChanged;
+        }
         base.ReactToVisualChanged();
 
         // don't do this, the layout may not have yet been performed yet:
@@ -344,9 +351,9 @@ public abstract class TextBoxBase :
 #endif
 
         coreTextObject = textComponent.RenderableComponent as 
-            global::RenderingLibrary.Graphics.Text;
+            Text;
         placeholderTextObject = placeholderComponent?.RenderableComponent as
-            global::RenderingLibrary.Graphics.Text;
+            Text;
 
 #if FULL_DIAGNOSTICS
         if (coreTextObject == null) throw new Exception("The Text instance must be of type Text");
@@ -399,12 +406,12 @@ public abstract class TextBoxBase :
 
     #region Event Handler Methods
 
-    private void HandleVisualSizeChanged(object sender, EventArgs e)
+    private void HandleVisualSizeChanged(object? sender, EventArgs e)
     {
         OffsetTextToKeepCaretInView();
     }
 
-    private void HandlePush(object sender, EventArgs args)
+    private void HandlePush(object? sender, EventArgs args)
     {
         // September 7, 2025
         // When pushing on a TextBox,
@@ -428,7 +435,7 @@ public abstract class TextBoxBase :
         }
     }
 
-    private void HandleClick(object sender, EventArgs args)
+    private void HandleClick(object? sender, EventArgs args)
     {
         InteractiveGue.CurrentInputReceiver = this;
     }
@@ -462,16 +469,16 @@ public abstract class TextBoxBase :
         }
     }
 
-    private void HandleRollOn(object sender, EventArgs args)
+    private void HandleRollOn(object? sender, EventArgs args)
     {
         UpdateState();
     }
 
-    private void HandleRollOver(object sender, EventArgs args)
+    private void HandleRollOver(object? sender, EventArgs args)
     {
     }
 
-    private void HandleDrag(object sender, EventArgs args)
+    private void HandleDrag(object? sender, EventArgs args)
     {
         if (MainCursor.LastInputDevice == InputDevice.Mouse)
         {
@@ -493,8 +500,13 @@ public abstract class TextBoxBase :
             {
                 var xChange = MainCursor.XChange / global::RenderingLibrary.SystemManagers.Default.Renderer.Camera.Zoom;
 
+#if RAYLIB
+                var stringLength = coreTextObject.MeasureString(DisplayedText);
+
+#else
                 var bitmapFont = this.coreTextObject.BitmapFont;
                 var stringLength = bitmapFont.MeasureString(DisplayedText, global::RenderingLibrary.Graphics.HorizontalMeasurementStyle.Full);
+#endif
 
                 var minimumShift = System.Math.Min(
                     edgeToTextPadding,
@@ -514,7 +526,7 @@ public abstract class TextBoxBase :
         }
     }
 
-    private void HandleRollOff(object sender, EventArgs args)
+    private void HandleRollOff(object? sender, EventArgs args)
     {
         UpdateState();
     }
@@ -547,8 +559,7 @@ public abstract class TextBoxBase :
         }
         else
         {
-            var bitmapFont = coreTextObject.BitmapFont;
-            var lineHeight = bitmapFont.LineHeightInPixels;
+            var lineHeight = coreTextObject.LineHeightInPixels;
             var topOfText = this.textComponent.GetAbsoluteTop();
             if (this.coreTextObject?.VerticalAlignment == global::RenderingLibrary.Graphics.VerticalAlignment.Center)
             {
@@ -592,6 +603,32 @@ public abstract class TextBoxBase :
     {
         var index = textToUse?.Length ?? 0;
         float distanceMeasuredSoFar = 0;
+
+#if RAYLIB
+        for (int i = 0; i < (textToUse?.Length ?? 0); i++)
+        {
+            // Is there a faster way to do this?
+            distanceMeasuredSoFar = coreTextObject.MeasureString(textToUse.Substring(0, i + 1));
+
+            // This should find which side of the character you're closest to, but for now it's good enough...
+            if (distanceMeasuredSoFar > cursorOffset)
+            {
+                var distanceBefore = coreTextObject.MeasureString(textToUse.Substring(0, i));
+                var advance = distanceMeasuredSoFar - distanceBefore;
+                var halfwayPoint = distanceMeasuredSoFar - (advance / 2.0f);
+                if (halfwayPoint > cursorOffset)
+                {
+                    index = i;
+                }
+                else
+                {
+                    index = i + 1;
+                }
+                break;
+            }
+        }
+#else
+
         var bitmapFont = this.coreTextObject.BitmapFont;
 
         for (int i = 0; i < (textToUse?.Length ?? 0); i++)
@@ -624,7 +661,7 @@ public abstract class TextBoxBase :
                 break;
             }
         }
-
+#endif
         return index;
     }
 
@@ -636,7 +673,7 @@ public abstract class TextBoxBase :
     /// <param name="isShiftDown"></param>
     /// <param name="isAltDown"></param>
     /// <param name="isCtrlDown"></param>
-    public void HandleKeyDown(Microsoft.Xna.Framework.Input.Keys key, bool isShiftDown, bool isAltDown, bool isCtrlDown)
+    public void HandleKeyDown(Keys key, bool isShiftDown, bool isAltDown, bool isCtrlDown)
     {
         //////////////////////////Early Out////////////////////////
         if (!isFocused) return;
@@ -645,7 +682,7 @@ public abstract class TextBoxBase :
 
         switch (key)
         {
-            case Microsoft.Xna.Framework.Input.Keys.Left:
+            case Keys.Left:
                 // todo - extract this so that we can also use CTRL for shift and delete/backspace...
                 if (selectionLength != 0 && isShiftDown == false)
                 {
@@ -709,12 +746,15 @@ public abstract class TextBoxBase :
                 }
                 break;
             case Keys.Back:
+#if RAYLIB
+            case Keys.Backspace:
+#endif
                 if (!IsReadOnly)
                 {
                     HandleBackspace(isCtrlDown);
                 }
                 break;
-            case Microsoft.Xna.Framework.Input.Keys.Right:
+            case Keys.Right:
                 if (selectionLength != 0 && isShiftDown == false)
                 {
                     caretIndex = selectionStart + selectionLength;
@@ -756,7 +796,7 @@ public abstract class TextBoxBase :
             case Keys.Down:
                 MoveCursorDownOneLine();
                 break;
-            case Microsoft.Xna.Framework.Input.Keys.Delete:
+            case Keys.Delete:
                 if (!IsReadOnly)
                 {
                     if (caretIndex < (DisplayedText?.Length ?? 0) || selectionLength > 0)
@@ -823,7 +863,7 @@ public abstract class TextBoxBase :
         }
         else
         {
-            var lineHeight = coreTextObject.BitmapFont.LineHeightInPixels;
+            var lineHeight = coreTextObject.LineHeightInPixels;
             var newY = absoluteY - lineHeight;
             var index = GetCaretIndexAtPosition(absoluteX, newY);
             CaretIndex = index;
@@ -840,7 +880,7 @@ public abstract class TextBoxBase :
         }
         else
         {
-            var lineHeight = coreTextObject.BitmapFont.LineHeightInPixels;
+            var lineHeight = coreTextObject.LineHeightInPixels;
             var newY = absoluteY + lineHeight;
             var index = GetCaretIndexAtPosition(absoluteX, newY);
             CaretIndex = index;
@@ -940,11 +980,11 @@ public abstract class TextBoxBase :
 
             HandleGamepadNavigation(gamepad);
 
-            if (gamepad.ButtonPushed(Buttons.A))
+            if (gamepad.ButtonPushed(GamepadButton.A))
             {
                 this.Visual.CallClick();
 
-                ControllerButtonPushed?.Invoke(Buttons.A);
+                ControllerButtonPushed?.Invoke(GamepadButton.A);
             }
 
         }
@@ -1006,13 +1046,13 @@ public abstract class TextBoxBase :
         // an IList or List. That's a breaking change for a tiny amount
         // of allocation....what to do....
 
-        var asMonoGameKeyboard = (IInputReceiverKeyboardMonoGame)keyboard;
+        var asMonoGameKeyboard = keyboard;
 
         // Handle all the special situations only based on Keyboard.GetState
         //   Situations: LEFT, HOME, END, BACK (Backspace), RIGHT, UP, DOWN, DELETE, CTRL+C, CTRL+X, CTRL+V, CTRL+A
         foreach (var key in asMonoGameKeyboard.KeysTyped)
         {
-            HandleKeyDown(key, shift, alt, ctrl);
+            HandleKeyDown((Keys)key, shift, alt, ctrl);
         }
 
         // String of letters typed and captured via the TextInput() Monogame event
@@ -1043,7 +1083,7 @@ public abstract class TextBoxBase :
     public void ReceiveInput()
     {
     }
-    #endregion
+#endregion
 
     #region UpdateTo Methods
 
@@ -1103,6 +1143,11 @@ public abstract class TextBoxBase :
     /// <param name="relativeIndexOnLine">The relative index in the line, where 0 is the first character in the line.</param>
     public void GetLineNumber(int absoluteCharacterIndex, out int lineNumber, out int absoluteStartOfLine, out int relativeIndexOnLine)
     {
+        // This is a copy of the method in TextExtensions.cs, but since that
+        // requires a Text and not an IText, that can't be referenced here.
+        // Doing so would require a little more refactoring. If this method 
+        // changes, make the change in TextExtensions, or clean it up.
+
         lineNumber = 0;
         relativeIndexOnLine = absoluteCharacterIndex;
         absoluteStartOfLine = 0;
@@ -1160,13 +1205,6 @@ public abstract class TextBoxBase :
         {
             GetLineNumber(caretIndex, out int lineNumber, out int _, out int relativeIndexOnLine);
 
-            int lineLength = 0;
-            if (lineNumber < coreTextObject.WrappedText.Count && lineNumber > -1)
-            {
-                var currentLine = coreTextObject.WrappedText[lineNumber];
-                lineLength = currentLine.Length;
-            }
-
             if (lineNumber == -1)
             {
                 SetXCaretPositionForLine(string.Empty, 0);
@@ -1187,7 +1225,7 @@ public abstract class TextBoxBase :
                     // do nothing
                     break;
                 case global::RenderingLibrary.Graphics.VerticalAlignment.Top:
-                    caretY -= coreTextObject.LineHeightMultiplier * coreTextObject.BitmapFont.LineHeightInPixels / 2.0f;
+                    caretY -= coreTextObject.LineHeightMultiplier * coreTextObject.LineHeightInPixels / 2.0f;
                     break;
             }
 
@@ -1407,7 +1445,7 @@ public abstract class TextBoxBase :
                         // do nothing
                         break;
                     case global::RenderingLibrary.Graphics.VerticalAlignment.Top:
-                        offsetPixelsFromSmall -= coreTextObject.LineHeightMultiplier * coreTextObject.BitmapFont.LineHeightInPixels / 2.0f;
+                        offsetPixelsFromSmall -= coreTextObject.LineHeightMultiplier * coreTextObject.LineHeightInPixels / 2.0f;
                         break;
                 }
 
@@ -1430,13 +1468,21 @@ public abstract class TextBoxBase :
         else
         {
             var selectionPosition = new SelectionPosition();
+#if RAYLIB
+            var firstMeasure = this.coreTextObject.MeasureString(substring);
+#else
             var firstMeasure = this.coreTextObject.BitmapFont.MeasureString(substring, global::RenderingLibrary.Graphics.HorizontalMeasurementStyle.Full);
+#endif
             substring = DisplayedText.Substring(0, selectionStart + selectionLength);
 
             selectionPosition.XStart = this.textComponent.X + firstMeasure;
             selectionPosition.Y = this.textComponent.Y;
             selectionPosition.Width = 1 +
+#if RAYLIB
+                this.coreTextObject.MeasureString(substring) - firstMeasure;
+#else
                 this.coreTextObject.BitmapFont.MeasureString(substring, global::RenderingLibrary.Graphics.HorizontalMeasurementStyle.Full) - firstMeasure;
+#endif
 
             selectionStartEnds.Add(selectionPosition);
         }
@@ -1495,7 +1541,7 @@ public abstract class TextBoxBase :
         }
     }
 
-    #endregion
+#endregion
 
     #region Get Positions
 
@@ -1537,9 +1583,16 @@ public abstract class TextBoxBase :
         indexIntoLine = System.Math.Min(indexIntoLine, stringToMeasure.Length);
         var substring = stringToMeasure.Substring(0, indexIntoLine);
         caretComponent.XUnits = global::Gum.Converters.GeneralUnitType.PixelsFromSmall;
+
+#if RAYLIB
+        if(true)
+        {
+            var measure = this.coreTextObject.MeasureString(substring);
+#else
         if (this.coreTextObject.BitmapFont != null)
         {
             var measure = this.coreTextObject.BitmapFont.MeasureString(substring, global::RenderingLibrary.Graphics.HorizontalMeasurementStyle.Full);
+#endif
             return measure + this.textComponent.X + GetLineXOffsetForHorizontalAlignment(stringToMeasure);
         }
         else
@@ -1566,7 +1619,7 @@ public abstract class TextBoxBase :
 
     private float GetCenterOfYForLinePixelsFromSmall(int lineNumber)
     {
-        var lineHeight = coreTextObject.BitmapFont.LineHeightInPixels;
+        var lineHeight = coreTextObject.LineHeightInPixels;
 
         float offset;
 
@@ -1585,7 +1638,7 @@ public abstract class TextBoxBase :
     }
 
 
-    #endregion
+#endregion
 
 
     public abstract void SelectAll();

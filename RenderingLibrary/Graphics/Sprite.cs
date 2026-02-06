@@ -682,26 +682,13 @@ public class Sprite : SpriteBatchRenderableBase,
             objectCausingRendering = ipso;
         }
 
-        Renderer renderer = null;
-        if (managers == null)
-        {
-            renderer = Renderer.Self;
-        }
-        else
-        {
-            renderer = managers.Renderer;
-        }
+        Renderer renderer = managers.Renderer ?? Renderer.Self;
 
-        Texture2D? textureToUse = texture;
+        Texture2D? textureToUse = texture ?? InvalidTexture;
 
         if (textureToUse == null)
         {
-            textureToUse = InvalidTexture;
-
-            if (textureToUse == null)
-            {
-                return;
-            }
+            return;
         }
 
         SpriteEffects effects = SpriteEffects.None;
@@ -712,7 +699,6 @@ public class Sprite : SpriteBatchRenderableBase,
         if (flipHorizontal)
         {
             effects |= SpriteEffects.FlipHorizontally;
-            //rotationInDegrees *= -1;
         }
 
         var rotationInRadians = MathHelper.ToRadians(rotationInDegrees);
@@ -1033,34 +1019,19 @@ public class Sprite : SpriteBatchRenderableBase,
 
     #region IVisible Implementation
 
+
+    /// <inheritdoc/>
     public bool Visible
     {
         get;
         set;
     }
 
-    public bool AbsoluteVisible
-    {
-        get
-        {
-            if (((IVisible)this).Parent == null)
-            {
-                return Visible;
-            }
-            else
-            {
-                return Visible && ((IVisible)this).Parent.AbsoluteVisible;
-            }
-        }
-    }
+    /// <inheritdoc/>
+    public bool AbsoluteVisible => ((IVisible)this).GetAbsoluteVisible();
 
-    IVisible IVisible.Parent
-    {
-        get
-        {
-            return ((IRenderableIpso)this).Parent as IVisible;
-        }
-    }
+    /// <inheritdoc/>
+    IVisible? IVisible.Parent => ((IRenderableIpso)this).Parent as IVisible;
 
     #endregion
 

@@ -14,16 +14,16 @@ namespace Gum.DataTypes
     public static class ElementSaveExtensionMethodsGumTool
     {
         private static readonly ISelectedState _selectedState = Locator.GetRequiredService<ISelectedState>();
-        public static FilePath GetFullPathXmlFile(this ElementSave elementSave)
+        public static FilePath? GetFullPathXmlFile(this ElementSave? elementSave)
         {
             return elementSave?.GetFullPathXmlFile(elementSave.Name);
         }
 
 
-        public static FilePath GetFullPathXmlFile(this ElementSave elementSave, string elementSaveName)
+        public static FilePath? GetFullPathXmlFile(this ElementSave elementSave, string elementSaveName)
         {
             var gumProject = ProjectManager.Self.GumProjectSave;
-            if (string.IsNullOrEmpty(gumProject.FullFileName))
+            if (string.IsNullOrEmpty(gumProject?.FullFileName))
             {
                 return null;
             }

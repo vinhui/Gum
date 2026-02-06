@@ -131,6 +131,8 @@ public class PluginManager : IPluginManager
     {
         get { return mPluginContainers; }
     }
+
+    public bool IsInitialized => this.Plugins != null;
     #endregion
 
     #region Exported objects
@@ -205,7 +207,7 @@ public class PluginManager : IPluginManager
     internal void ProjectLoad(GumProjectSave newlyLoadedProject) =>
         CallMethodOnPlugin(plugin => plugin.CallProjectLoad(newlyLoadedProject));
 
-    internal void ProjectPropertySet(string propertyName) =>
+    public void ProjectPropertySet(string propertyName) =>
         CallMethodOnPlugin(plugin => plugin.CallProjectPropertySet(propertyName));
     internal void ProjectSave(GumProjectSave savedProject) =>
         CallMethodOnPlugin(plugin => plugin.CallProjectSave(savedProject));
@@ -364,7 +366,7 @@ public class PluginManager : IPluginManager
     internal void ElementSelected(ElementSave? elementSave) =>
         CallMethodOnPlugin(plugin => plugin.CallElementSelected(elementSave));
 
-    internal void TreeNodeSelected(TreeNode treeNode) =>
+    internal void TreeNodeSelected(TreeNode? treeNode) =>
         CallMethodOnPlugin(plugin => plugin.CallTreeNodeSelected(treeNode));
 
     internal void StateWindowTreeNodeSelected(TreeNode treeNode) =>
@@ -428,18 +430,18 @@ public class PluginManager : IPluginManager
     public virtual void InstancesDelete(ElementSave elementSave, InstanceSave[] instances) =>
         CallMethodOnPlugin(plugin => plugin.CallInstancesDelete(elementSave, instances));
 
-    internal StateSave? GetDefaultStateFor(string type)
+    public StateSave? GetDefaultStateFor(string type)
     {
         StateSave? toReturn = null;
         CallMethodOnPlugin(plugin => toReturn = plugin.CallGetDefaultStateFor(type) ?? toReturn);
         return toReturn;
     }
 
-    internal void InstanceReordered(InstanceSave instance) =>
+    public void InstanceReordered(InstanceSave instance) =>
         CallMethodOnPlugin(plugin => plugin.CallInstanceReordered(instance));
     
 
-    internal bool GetIfExtensionIsValid(string extension, ElementSave parentElement, InstanceSave instance, string changedMember)
+    public bool GetIfExtensionIsValid(string extension, ElementSave parentElement, InstanceSave instance, string changedMember)
     {
         bool toReturn = false;
         CallMethodOnPlugin(plugin =>
@@ -454,7 +456,7 @@ public class PluginManager : IPluginManager
         return toReturn;
     }
 
-    internal void RefreshBehaviorView(ElementSave elementSave) =>
+    public void RefreshBehaviorView(ElementSave elementSave) =>
         CallMethodOnPlugin(plugin => plugin.CallRefreshBehaviorUi());
 
     internal void RefreshVariableView(bool force) =>
@@ -463,7 +465,7 @@ public class PluginManager : IPluginManager
     internal void BehaviorReferencesChanged(ElementSave elementSave) => 
         CallMethodOnPlugin(plugin => plugin.CallBehaviorReferencesChanged(elementSave));
 
-    internal void WireframeRefreshed() =>
+    public void WireframeRefreshed() =>
         CallMethodOnPlugin(
             plugin => plugin.CallWireframeRefreshed());
 
@@ -842,7 +844,7 @@ public class PluginManager : IPluginManager
 
 
 
-    private Assembly currentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
+    private Assembly currentDomain_AssemblyResolve(object? sender, ResolveEventArgs args)
     {
         foreach (Assembly item in mExternalAssemblies)
         {

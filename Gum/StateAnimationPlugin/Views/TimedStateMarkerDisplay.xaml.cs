@@ -90,7 +90,7 @@ namespace StateAnimationPlugin.Views
 
         }
 
-        private void HandleCanvasSizeChanged(object sender, SizeChangedEventArgs e)
+        private void HandleCanvasSizeChanged(object? sender, SizeChangedEventArgs e)
         {
             RefreshRectangles();
         }
@@ -98,7 +98,7 @@ namespace StateAnimationPlugin.Views
 
         private static void SelectedKeyframeChangedCallback(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var instance = d as TimedStateMarkerDisplay;
+            var instance = (TimedStateMarkerDisplay)d;
 
             //var oldKeyframeViewModel = e.OldValue as AnimatedKeyframeViewModel;
 
@@ -125,7 +125,7 @@ namespace StateAnimationPlugin.Views
             display.RefreshRectangles();
         }
 
-        private void SelectedKeyframeValueChanged(object sender, PropertyChangedEventArgs e)
+        private void SelectedKeyframeValueChanged(object? sender, PropertyChangedEventArgs e)
         {
             switch(e.PropertyName)
             {
@@ -138,7 +138,7 @@ namespace StateAnimationPlugin.Views
 
         private static void MarkerItemSourceChangeCallback(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            TimedStateMarkerDisplay instance = d as TimedStateMarkerDisplay;
+            TimedStateMarkerDisplay instance = (TimedStateMarkerDisplay)d;
             var oldValues = e.OldValue as IEnumerable<AnimatedKeyframeViewModel>;
 
             if(oldValues != null)
@@ -160,7 +160,7 @@ namespace StateAnimationPlugin.Views
             instance.RefreshRectangles();
         }
 
-        private void HandleItemPropertyChanged(object sender, PropertyChangedEventArgs e)
+        private void HandleItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             RefreshRectangles();
         }
@@ -282,7 +282,7 @@ namespace StateAnimationPlugin.Views
             }
         }
 
-        private void SKElement_PaintSurface(object sender, SkiaSharp.Views.Desktop.SKPaintSurfaceEventArgs e)
+        private void SKElement_PaintSurface(object? sender, SkiaSharp.Views.Desktop.SKPaintSurfaceEventArgs e)
         {
             var canvas = e.Surface.Canvas;
 
