@@ -23,6 +23,7 @@ using Gum.Services.Dialogs;
 using ToolsUtilities;
 using CommunityToolkit.Mvvm.Messaging;
 using Gum.Messages;
+using Gum.Localization;
 
 namespace CodeOutputPlugin;
 
@@ -44,7 +45,7 @@ public class MainCodeOutputPlugin : PluginBase
     private readonly ISelectedState _selectedState;
     private readonly RenameService _renameService;
     private readonly IMessenger _messenger;
-    private readonly LocalizationManager _localizationManager;
+    private readonly LocalizationService _localizationService;
     private readonly INameVerifier _nameVerifier;
     private readonly CodeGenerator _codeGenerator;
     private readonly ParentSetLogic _parentSetLogic;
@@ -52,8 +53,8 @@ public class MainCodeOutputPlugin : PluginBase
     PluginTab pluginTab = default!;
 
     // Not sure why this is null..., so getting it from the builder instead
-    //[Import("LocalizationManager")]
-    //public LocalizationManager LocalizationManager
+    //[Import("LocalizationService")]
+    //public LocalizationService LocalizationService
     //{
     //    get;
     //    set;
@@ -68,24 +69,26 @@ public class MainCodeOutputPlugin : PluginBase
         codeOutputProjectSettings = new CodeOutputProjectSettings();
 
         _nameVerifier = Locator.GetRequiredService<INameVerifier>();
-        _localizationManager = Locator.GetRequiredService<LocalizationManager>();
+        _localizationService = Locator.GetRequiredService<LocalizationService>();
 
         CodeGenerationNameVerifier codeGenerationNameVerifier = new(_nameVerifier);
 
-        _codeGenerator = new CodeGenerator(codeGenerationNameVerifier, _localizationManager);
+        _codeGenerator = new CodeGenerator(codeGenerationNameVerifier, _localizationService);
 
-        _codeGenerationFileLocationsService = new CodeGenerationFileLocationsService(_codeGenerator, codeGenerationNameVerifier);
+        var projectState = Locator.GetRequiredService<IProjectState>();
+        _codeGenerationFileLocationsService = new CodeGenerationFileLocationsService(_codeGenerator, codeGenerationNameVerifier, projectState);
 
         _selectedState = Locator.GetRequiredService<ISelectedState>();
 
         var customCodeGenerator = new CustomCodeGenerator(_codeGenerator, codeGenerationNameVerifier);
-        _codeGenerationService = new CodeGenerationService(_guiCommands, _codeGenerator, _dialogService, customCodeGenerator, codeGenerationNameVerifier);
+        _codeGenerationService = new CodeGenerationService(_guiCommands, _codeGenerator, _dialogService, customCodeGenerator, codeGenerationNameVerifier, projectState);
         _renameService = new RenameService(
-            _codeGenerationService, 
-            _codeGenerator, 
-            customCodeGenerator, 
-            codeGenerationNameVerifier, 
-            _dialogService);
+            _codeGenerationService,
+            _codeGenerator,
+            customCodeGenerator,
+            codeGenerationNameVerifier,
+            _dialogService,
+            projectState);
 
         _messenger = Locator.GetRequiredService<IMessenger>();
 
@@ -95,7 +98,11 @@ public class MainCodeOutputPlugin : PluginBase
             this, 
             (_, message) => HandleRequestCodeGeneration(message));
 
-        viewModel = new ViewModels.CodeWindowViewModel();
+        viewModel = new ViewModels.CodeWindowViewModel(
+            Locator.GetRequiredService<IProjectState>(),
+            Locator.GetRequiredService<IFileCommands>(),
+            Locator.GetRequiredService<IDialogService>(),
+            Locator.GetRequiredService<IGuiCommands>());
     }
 
     private void HandleRequestCodeGeneration(RequestCodeGenerationMessage message)
@@ -230,7 +237,8 @@ public class MainCodeOutputPlugin : PluginBase
         if (control == null) return;
         ///////////////////////End Early Out//////////////////
 
-        if (element != null && GumState.Self.ProjectState.GumProjectSave?.FullFileName != null)
+        var projectState = Locator.GetRequiredService<IProjectState>();
+        if (element != null && projectState.GumProjectSave?.FullFileName != null)
         {
             control.CodeOutputElementSettings = CodeOutputElementSettingsManager.LoadOrCreateSettingsFor(element);
         }
@@ -426,8 +434,9 @@ public class MainCodeOutputPlugin : PluginBase
 
     private void HandleMainViewModelPropertyChanged(string? propertyName)
     {
+        var projectState = Locator.GetRequiredService<IProjectState>();
         /////////////////Early Out////////////////////
-        if(GumState.Self.ProjectState.GumProjectSave == null)
+        if(projectState.GumProjectSave == null)
         {
             return;
         }
@@ -465,7 +474,7 @@ public class MainCodeOutputPlugin : PluginBase
     {
         if(string.IsNullOrEmpty(codeOutputProjectSettings.CodeProjectRoot))
         {
-            var message = "To save generated code, you must specify a .csproj location.";
+            var message = "To save generated code, you must specify a Code Project Root.";
 
             var csprojAboveGumx = viewModel.GetCsprojDirectoryAboveGumx();
             if(csprojAboveGumx == null)
@@ -484,8 +493,9 @@ public class MainCodeOutputPlugin : PluginBase
             {
                 if(viewModel.IsAllInProjectGenerating)
                 {
+                    var projectState = Locator.GetRequiredService<IProjectState>();
                     int numberOfElements = 0;
-                    foreach(var element in GumState.Self.ProjectState.GumProjectSave.AllElements)
+                    foreach(var element in projectState.GumProjectSave.AllElements)
                     {
                         if(element is StandardElementSave)
                         {
@@ -516,7 +526,8 @@ public class MainCodeOutputPlugin : PluginBase
 
     private void HandleGenerateAllCodeButtonClicked(bool showPopups = true)
     {
-        var gumProject = GumState.Self.ProjectState.GumProjectSave;
+        var projectState = Locator.GetRequiredService<IProjectState>();
+        var gumProject = projectState.GumProjectSave;
         foreach (var screen in gumProject.Screens)
         {
             var screenOutputSettings = CodeOutputElementSettingsManager.LoadOrCreateSettingsFor(screen);

@@ -11,8 +11,11 @@ using Gum.Mvvm;
 using Gum.Plugins;
 using Gum.Plugins.InternalPlugins.TreeView;
 using Gum.Plugins.InternalPlugins.TreeView.ViewModels;
+using Gum.Plugins.InternalPlugins.VariableGrid;
+using Gum.PropertyGridHelpers;
 using Gum.Services;
 using Gum.Services.Dialogs;
+using Gum.ToolCommands;
 using Gum.ToolStates;
 using Gum.Undo;
 using Gum.Wireframe;
@@ -135,8 +138,11 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     private readonly IGuiCommands _guiCommands;
     private readonly IDialogService _dialogService;
     private readonly IFileCommands _fileCommands;
-    private readonly HotkeyManager _hotkeyManager;
+    private readonly IHotkeyManager _hotkeyManager;
     private readonly ITabManager _tabManager;
+    private readonly ICircularReferenceManager _circularReferenceManager;
+    private readonly IFavoriteComponentManager _favoriteComponentManager;
+    private readonly ElementTreeViewCreator _viewCreator;
 
     public const int TransparentImageIndex = 0;
     public const int FolderImageIndex = 1;
@@ -150,25 +156,23 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     public const int DerivedInstanceImageIndex = 9;
 
     static ElementTreeViewManager mSelf;
-    ContextMenuStrip mMenuStrip;
-    
 
-    MultiSelectTreeView ObjectTreeView;
-    private ImageList originalImageList;
+    // Forwarding properties for UI controls owned by _viewCreator
+    internal MultiSelectTreeView ObjectTreeView => _viewCreator.ObjectTreeView;
+    private ContextMenuStrip mMenuStrip => _viewCreator.MenuStrip;
+    private FlatSearchListBox FlatList => _viewCreator.FlatList;
+    private System.Windows.Forms.Integration.WindowsFormsHost TreeViewHost => _viewCreator.TreeViewHost;
+    private System.Windows.Controls.TextBox searchTextBox => _viewCreator.SearchTextBox;
+    private System.Windows.Controls.CheckBox deepSearchCheckBox => _viewCreator.DeepSearchCheckBox;
+
     public ImageList unmodifiableImageList
     {
-        get
-        {
-            return CloneImageList(originalImageList);
-        }
-        set
-        {
-            if (originalImageList == null)
-            {
-                originalImageList = value;
-            }
-        }
+        get => _viewCreator.UnmodifiableImageList;
+        set => _viewCreator.UnmodifiableImageList = value;
     }
+
+    internal void UpdateCollapseButtonSizes(double baseFontSize) =>
+        _viewCreator.UpdateCollapseButtonSizes(baseFontSize);
 
     TreeNode mScreensTreeNode;
     TreeNode mComponentsTreeNode;
@@ -179,19 +183,12 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     private Cursor AddCursor { get; }
 
 
-    FlatSearchListBox FlatList;
-    System.Windows.Forms.Integration.WindowsFormsHost TreeViewHost;
-
-
     /// <summary>
     /// Used to store off what was previously selected
     /// when the tree view refreshes itself - so the user
     /// doesn't lose the old selection.
     /// </summary>
     object? mRecordedSelectedObject;
-
-    System.Windows.Controls.TextBox searchTextBox;
-    System.Windows.Controls.CheckBox deepSearchCheckBox;
     #endregion
 
     #region Properties
@@ -280,13 +277,19 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
     public TreeNode RootBehaviorsTreeNode => mBehaviorsTreeNode;
 
-    private DragDropManager _dragDropManager;
-    private CopyPasteLogic _copyPasteLogic;
+    private IDragDropManager _dragDropManager;
+    private readonly ICopyPasteLogic _copyPasteLogic;
     private readonly IMessenger _messenger;
-    private readonly DeleteLogic _deleteLogic;
+    private readonly IDeleteLogic _deleteLogic;
     private readonly IUndoManager _undoManager;
-    private readonly WireframeObjectManager _wireframeObjectManager;
+    private readonly IWireframeObjectManager _wireframeObjectManager;
     private readonly FileLocations _fileLocations;
+    private readonly IElementCommands _elementCommands;
+    private readonly INameVerifier _nameVerifier;
+    private readonly ISetVariableLogic _setVariableLogic;
+    private readonly IProjectState _projectState;
+    private readonly ICollapseToggleService _collapseToggleService;
+    private readonly StandardElementsManagerGumTool _standardElementsManagerGumTool;
 
     public bool HasMouseOver
     {
@@ -307,19 +310,27 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         _guiCommands = Locator.GetRequiredService<IGuiCommands>();
         _dialogService = Locator.GetRequiredService<IDialogService>();
         _fileCommands = Locator.GetRequiredService<IFileCommands>();
-        _hotkeyManager = Locator.GetRequiredService<HotkeyManager>();
+        _hotkeyManager = Locator.GetRequiredService<IHotkeyManager>();
         _tabManager = Locator.GetRequiredService<ITabManager>();
-        _copyPasteLogic = Locator.GetRequiredService<CopyPasteLogic>();
+        _copyPasteLogic = Locator.GetRequiredService<ICopyPasteLogic>();
         _messenger = Locator.GetRequiredService<IMessenger>();
         _messenger.RegisterAll(this);
-        _deleteLogic = Locator.GetRequiredService<DeleteLogic>();
+        _deleteLogic = Locator.GetRequiredService<IDeleteLogic>();
         _undoManager = Locator.GetRequiredService<IUndoManager>();
-        _wireframeObjectManager = Locator.GetRequiredService<WireframeObjectManager>();
+        _wireframeObjectManager = Locator.GetRequiredService<IWireframeObjectManager>();
         _fileLocations = Locator.GetRequiredService<FileLocations>();
-
-
+        _elementCommands = Locator.GetRequiredService<IElementCommands>();
+        _nameVerifier = Locator.GetRequiredService<INameVerifier>();
+        _setVariableLogic = Locator.GetRequiredService<ISetVariableLogic>();
+        _circularReferenceManager = Locator.GetRequiredService<ICircularReferenceManager>();
+        _favoriteComponentManager = Locator.GetRequiredService<IFavoriteComponentManager>();
+        _projectState = Locator.GetRequiredService<IProjectState>();
+        _standardElementsManagerGumTool = Locator.GetRequiredService<StandardElementsManagerGumTool>();
+        _collapseToggleService = new CollapseToggleService();
         TreeNodeExtensionMethods.ElementTreeViewManager = this;
         AddCursor = GetAddCursor();
+        _dragDropManager = Locator.GetRequiredService<IDragDropManager>();
+        _viewCreator = new ElementTreeViewCreator();
 
         Cursor GetAddCursor()
         {
@@ -339,23 +350,23 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
 
     #region Find/Get
-    public TreeNode GetTreeNodeFor(ElementSave elementSave)
+    public TreeNode? GetTreeNodeFor(ElementSave? elementSave)
     {
         if (elementSave == null)
         {
             return null;
         }
-        else if (elementSave is ScreenSave)
+        else if (elementSave is ScreenSave screenSave)
         {
-            return GetTreeNodeFor(elementSave as ScreenSave);
+            return GetTreeNodeFor(screenSave);
         }
-        else if (elementSave is ComponentSave)
+        else if (elementSave is ComponentSave componentSave)
         {
-            return GetTreeNodeFor(elementSave as ComponentSave);
+            return GetTreeNodeFor(componentSave);
         }
-        else if (elementSave is StandardElementSave)
+        else if (elementSave is StandardElementSave standardElementSave)
         {
-            return GetTreeNodeFor(elementSave as StandardElementSave);
+            return GetTreeNodeFor(standardElementSave);
         }
 
         return null;
@@ -379,7 +390,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         return GetTreeNodeForTag(standardElementSave, RootStandardElementsTreeNode);
     }
 
-    public TreeNode GetTreeNodeFor(InstanceSave instanceSave, TreeNode container)
+    public TreeNode? GetTreeNodeFor(InstanceSave instanceSave, TreeNode container)
     {
         foreach (TreeNode node in container.Nodes)
         {
@@ -388,7 +399,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
                 return node;
             }
 
-            TreeNode childNode = GetTreeNodeFor(instanceSave, node);
+            TreeNode? childNode = GetTreeNodeFor(instanceSave, node);
             if (childNode != null)
             {
                 return childNode;
@@ -398,7 +409,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         return null;
     }
 
-    public TreeNode GetInstanceTreeNodeByName(string name, TreeNode container)
+    public TreeNode? GetInstanceTreeNodeByName(string name, TreeNode container)
     {
         foreach (TreeNode node in container.Nodes)
         {
@@ -407,7 +418,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
                 return node;
             }
 
-            TreeNode childNode = GetInstanceTreeNodeByName(name, node);
+            TreeNode? childNode = GetInstanceTreeNodeByName(name, node);
             if (childNode != null)
             {
                 return childNode;
@@ -425,7 +436,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     public TreeNode GetTreeNodeFor(string absoluteDirectory)
     {
         string relative = FileManager.MakeRelative(absoluteDirectory,
-            FileManager.GetDirectory(ProjectManager.Self.GumProjectSave.FullFileName));
+            FileManager.GetDirectory(_projectState.GumProjectSave.FullFileName));
 
 
         relative = FileManager.Standardize(relative);
@@ -550,249 +561,113 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
     public void Initialize()
     {
-        _dragDropManager = Locator.GetRequiredService<DragDropManager>();
 
-        CreateObjectTreeView();
+        var grid = _viewCreator.CreateView(
+            onAfterClickSelect: this.ObjectTreeView_AfterClickSelect,
+            onAfterSelect: this.ObjectTreeView_AfterSelect_1,
+            onKeyDown: this.ObjectTreeView_KeyDown,
+            onKeyPress: this.ObjectTreeView_KeyPress,
+            onMouseClick: this.ObjectTreeView_MouseClick,
+            onMouseMove: (x, y) => HandleMouseOver(x, y),
+            onFontChanged: (sender, _) =>
+            {
+                if (sender is MultiSelectTreeView { Font: { Size: var fontSize } font })
+                {
+                    const float defaultFontSize = 9f;
+                    _viewCreator.UpdateTreeviewIcons(fontSize / defaultFontSize);
+                    mMenuStrip.Renderer = FrbMenuStripRenderer.GetCurrentThemeRenderer(out var _);
+                    mMenuStrip.Font = font;
+                }
+            },
+            onDragOver: (sender, e) =>
+            {
+                // allow file drops
+                if (e.Data?.GetDataPresent(System.Windows.Forms.DataFormats.FileDrop) == true)
+                {
+                    e.Effect = DragDropEffects.Copy;
+                }
 
-        CreateContextMenuStrip();
+                // auto expand hovered nodes when they're collapsed
+                var treeview = (MultiSelectTreeView?)sender;
+                Point? pointWithinTreeview = treeview?.PointToClient(new Point(e.X, e.Y));
+                if (pointWithinTreeview != null && treeview?.GetNodeAt(pointWithinTreeview.Value) is { } hovered)
+                {
+                    DelayExpandHoveredNode(hovered);
+                }
+            },
+            onDragDrop: (_, e) =>
+            {
+                if (e.Data?.GetData(System.Windows.Forms.DataFormats.FileDrop) is string[] files)
+                {
+                    _dragDropManager.OnFilesDroppedInTreeView(files);
+                }
+            },
+            onQueryContinueDrag: (_, e) =>
+            {
+                if (e.Action != DragAction.Continue)
+                {
+                    Locator.GetRequiredService<IDispatcher>().Post(() =>
+                    {
+                        OnSelect(ObjectTreeView.SelectedNode);
+                    });
+                }
+            },
+            onValidateSortingDrop: (_, e) =>
+            {
+                e.Allow = false;
+
+                if (ProcessDrop(e.TargetNode, e.Kind) is { } drop)
+                {
+                    IEnumerable<ITreeNode> wrappedNodes = e.DraggedNodes.Select(n => new TreeNodeWrapper(n));
+                    ITreeNode wrappedTarget = new TreeNodeWrapper(drop.target);
+
+                    e.Allow = _dragDropManager.ValidateNodeSorting(wrappedNodes, wrappedTarget, drop.index);
+                }
+            },
+            onNodeSortingDropped: (_, e) =>
+            {
+                if (ProcessDrop(e.TargetNode, e.Kind) is { } drop)
+                {
+                    IEnumerable<ITreeNode> wrappedNodes = e.DraggedNodes.Select(n => new TreeNodeWrapper(n));
+                    ITreeNode wrappedTarget = new TreeNodeWrapper(drop.target);
+
+                    e.Kind = e.Kind == MultiSelectTreeView.DropKind.None
+                        ? MultiSelectTreeView.DropKind.None
+                        : MultiSelectTreeView.DropKind.Into;
+
+                    _dragDropManager.OnNodeSortingDropped(wrappedNodes, wrappedTarget, drop.index);
+                }
+                e.PerformNativeReorder = false;
+            },
+            onGiveFeedback: (sender, e) =>
+            {
+                if (InputLibrary.Cursor.Self.IsInWindow)
+                {
+                    e.UseDefaultCursors = false;
+                    System.Windows.Forms.Cursor.Current = AddCursor;
+                }
+            },
+            onFilterTextChanged: text => FilterText = text,
+            onSearchNodeSelected: HandleSelectedSearchNode,
+            onCollapseAll: () => _collapseToggleService.HandleCollapseAll(ObjectTreeView, () => _viewCreator.CollapseAll()),
+            onCollapseToElementLevel: () => _collapseToggleService.HandleCollapseToElementLevel(ObjectTreeView, () => _viewCreator.CollapseToElementLevel()),
+            onDeepSearchChecked: () => ReactToFilterTextChanged());
+
+        _tabManager.AddControl(grid, "Project", TabLocation.Left);
+
+        ObjectTreeView.AfterExpand += (_, _) => _collapseToggleService.OnNodeManuallyChanged();
+        ObjectTreeView.AfterCollapse += (_, _) => _collapseToggleService.OnNodeManuallyChanged();
 
         RefreshUi();
 
         InitializeMenuItems();
 
-
-        var grid = new Grid();
-        grid.Margin = new Thickness(4);
-        grid.RowDefinitions.Add(
-            new System.Windows.Controls.RowDefinition() 
-            { Height = System.Windows.GridLength.Auto });
-        grid.RowDefinitions.Add(
-            new System.Windows.Controls.RowDefinition()
-                { Height = System.Windows.GridLength.Auto });
-        grid.RowDefinitions.Add(
-            new System.Windows.Controls.RowDefinition() 
-            { Height = new System.Windows.GridLength(1, System.Windows.GridUnitType.Star) });
-
-        _tabManager.AddControl(grid, "Project", TabLocation.Left);
-
-        ObjectTreeView.Dock = DockStyle.Fill;
-
-        TreeViewHost = new System.Windows.Forms.Integration.WindowsFormsHost();
-        TreeViewHost.Background = System.Windows.Media.Brushes.Transparent;
-
-        ThemedScrollContainer scrollContainer = new()
-        {
-            AutoComputeExtent = false,
-            Dock = DockStyle.Fill,
-            EnableHorizontalScroll = true
-        };
-        scrollContainer.AddContent(ObjectTreeView);
-        scrollContainer.WireTreeToScroller(ObjectTreeView);
-
-        TreeViewHost.Child = scrollContainer;
-        TreeViewHost.Margin = new Thickness(0,4,0,0);
-        
-        Grid.SetRow(TreeViewHost, 2);
-        grid.Children.Add(TreeViewHost);
-
-
-        var searchBarUi = CreateSearchBoxUi();
-        Grid.SetRow(searchBarUi, 0);
-        grid.Children.Add(searchBarUi);
-
-        var checkBoxUi = CreateSearchCheckBoxUi();
-        checkBoxUi.Visibility = Visibility.Collapsed;
-        checkBoxUi.Focusable = false;
-        checkBoxUi.Margin = new Thickness(0, 2, 0, 0);
-        
-        Grid.SetRow(checkBoxUi, 1);
-        grid.Children.Add(checkBoxUi);
-
-        FlatList = CreateFlatSearchList();
-        FlatList.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-        FlatList.VerticalAlignment = System.Windows.VerticalAlignment.Stretch;
-        FlatList.Margin = new(0, 4, 0, 0);
-        FlatList.Visibility = Visibility.Collapsed;
-
-        Grid.SetRow(FlatList, 2);
-        grid.Children.Add(FlatList);
-
-        //_guiCommands.AddControl(panel, "Project", TabLocation.Left);
-
-        searchBarUi.GotKeyboardFocus += (_, _) => UpdateCheckBoxVisibility();
-        searchBarUi.LostKeyboardFocus += (_, _) => UpdateCheckBoxVisibility();
-        FlatList.IsVisibleChanged += (_, _) => UpdateCheckBoxVisibility();
-        void UpdateCheckBoxVisibility()
-        {
-            bool textBoxFocused = searchTextBox.IsKeyboardFocusWithin;
-            bool listViewVisible = FlatList.Visibility == Visibility.Visible;
-
-            checkBoxUi.Visibility = (textBoxFocused || listViewVisible)
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        }
-        ApplyThemeColors();
-    }
-
-
-    internal void FocusSearch()
-    {
-        searchTextBox.Focus();
-    }
-
-    private void CreateContextMenuStrip()
-    {
-        this.mMenuStrip = new System.Windows.Forms.ContextMenuStrip();
-        this.mMenuStrip.Name = "ElementMenuStrip";
-        this.mMenuStrip.Size = new System.Drawing.Size(61, 4);
-        this.mMenuStrip.Renderer = FrbMenuStripRenderer.GetCurrentThemeRenderer(out _);
-        this.ObjectTreeView.ContextMenuStrip = this.mMenuStrip;
-    }
-
-    private void CreateObjectTreeView()
-    {
-        this.ObjectTreeView = new CommonFormsAndControls.MultiSelectTreeView();
-        this.ObjectTreeView.IsSelectingOnPush = false;
-        this.ObjectTreeView.AllowDrop = true;
-        this.ObjectTreeView.AlwaysHaveOneNodeSelected = false;
-        // External drag/drop logic is provided; disable native reorder for this host
-        this.ObjectTreeView.EnableNativeReorder = true;
-        this.ObjectTreeView.Dock = System.Windows.Forms.DockStyle.Fill;
-        this.ObjectTreeView.HotTracking = true;
-        this.ObjectTreeView.ImageIndex = 0;
-        this.ObjectTreeView.ImageList = ObjectTreeView.ElementTreeImageList;
-        unmodifiableImageList = ObjectTreeView.ElementTreeImageList;
-        this.ObjectTreeView.Location = new System.Drawing.Point(0, 0);
-        this.ObjectTreeView.MultiSelectBehavior = CommonFormsAndControls.MultiSelectBehavior.CtrlDown;
-        this.ObjectTreeView.Name = "ObjectTreeView";
-        this.ObjectTreeView.SelectedImageIndex = 0;
-        this.ObjectTreeView.Size = new System.Drawing.Size(196, 621);
-        this.ObjectTreeView.TabIndex = 0;
-        this.ObjectTreeView.AfterClickSelect += this.ObjectTreeView_AfterClickSelect;
-        this.ObjectTreeView.AfterSelect += this.ObjectTreeView_AfterSelect_1;
-        this.ObjectTreeView.KeyDown += this.ObjectTreeView_KeyDown;
-        this.ObjectTreeView.KeyPress += this.ObjectTreeView_KeyPress;
-        this.ObjectTreeView.PreviewKeyDown += this.ObjectTreeView_PreviewKeyDown;
-        this.ObjectTreeView.MouseClick += this.ObjectTreeView_MouseClick;
-        this.ObjectTreeView.BackColor =
-            Application.Current.TryFindResource("Frb.Colors.SurfaceO1") is System.Windows.Media.Color color
-                ? System.Drawing.Color.FromArgb(color.A, color.R, color.G, color.B)
-                : System.Drawing.SystemColors.Window;
-        this.ObjectTreeView.LineColor = ObjectTreeView.BackColor;
-
-        this.ObjectTreeView.MouseMove += (sender, e) => HandleMouseOver(e.X, e.Y);
-        this.ObjectTreeView.FontChanged += (sender, _) =>
-        {
-            if (sender is MultiSelectTreeView { Font: { Size: var fontSize } font })
-            {
-                const float defaultFontSize = 9f;
-                UpdateTreeviewIcons(fontSize/defaultFontSize);
-                mMenuStrip.Renderer = FrbMenuStripRenderer.GetCurrentThemeRenderer(out var _);
-                mMenuStrip.Font = font;
-            }
-        };
-        this.ObjectTreeView.BorderStyle = BorderStyle.None;
-
-        ObjectTreeView.DragOver += (sender, e) =>
-        {
-            // allow file drops
-            if (e.Data.GetDataPresent(System.Windows.Forms.DataFormats.FileDrop))
-            {
-                e.Effect = DragDropEffects.Copy;
-            }
-
-            // auto expand hovered nodes when they're collapsed
-            var treeview = (MultiSelectTreeView)sender;
-            Point pointWithinTreeview = treeview.PointToClient(new Point(e.X, e.Y));
-            if (treeview.GetNodeAt(pointWithinTreeview) is { } hovered)
-            {
-                DelayExpandHoveredNode(hovered);
-            }
-        };
-
-        ObjectTreeView.DragDrop += (_, e) =>
-        {
-            if (e.Data?.GetData(System.Windows.Forms.DataFormats.FileDrop) is string[] files)
-            {
-                _dragDropManager.OnFilesDroppedInTreeView(files);
-            }
-        };
-
-        
-        ObjectTreeView.QueryContinueDrag += (_, e) =>
-        {
-            if (e.Action != DragAction.Continue)
-            {
-                Locator.GetRequiredService<IDispatcher>().Post(() =>
-                {
-                    // When a node is dragged, it becomes internally selected in the treeview.
-                    // In the case a drop fails, is cancelled, or a successful drop doesn't result
-                    // in a selection change, we use this as a safety-net to ensure the selection-manager
-                    // is in-sync with the treeview selection.
-                    OnSelect(ObjectTreeView.SelectedNode);
-                });
-            }
-        };
-
-        ObjectTreeView.ValidateSortingDrop += (_, e) =>
-        {
-            // --- Early return example of existing behavior ---
-            //e.Kind = e.Kind == MultiSelectTreeView.DropKind.None
-            //    ? MultiSelectTreeView.DropKind.None
-            //    : MultiSelectTreeView.DropKind.Into;
-            //e.Allow = e.Kind != MultiSelectTreeView.DropKind.None;
-            //return;
-
-            e.Allow = false; // Probably best to default to false?
-
-            if (ProcessDrop(e.TargetNode, e.Kind) is { } drop)
-            {
-                IEnumerable<ITreeNode> wrappedNodes = e.DraggedNodes.Select(n => new TreeNodeWrapper(n));
-                ITreeNode wrappedTarget = new TreeNodeWrapper(drop.target);
-                
-                e.Allow = _dragDropManager.ValidateNodeSorting(wrappedNodes, wrappedTarget, drop.index);
-            }
-        };
-
-        ObjectTreeView.NodeSortingDropped += (_, e) =>
-        {
-            // --- Early return example of existing behavior ---
-            //e.Kind = e.Kind == MultiSelectTreeView.DropKind.None
-            //    ? MultiSelectTreeView.DropKind.None
-            //    : MultiSelectTreeView.DropKind.Into;
-            //_dragDropManager.OnNodeSortingDropped(e.DraggedNodes.Select(n => new TreeNodeWrapper(n)), new TreeNodeWrapper(e.TargetNode), e.TargetNode.GetNodeCount(false));
-            //e.PerformNativeReorder = false;
-            //return;
-
-            if (ProcessDrop(e.TargetNode, e.Kind) is { } drop)
-            {
-                IEnumerable<ITreeNode> wrappedNodes = e.DraggedNodes.Select(n => new TreeNodeWrapper(n));
-                ITreeNode wrappedTarget = new TreeNodeWrapper(drop.target);
-
-                e.Kind = e.Kind == MultiSelectTreeView.DropKind.None
-                    ? MultiSelectTreeView.DropKind.None
-                    : MultiSelectTreeView.DropKind.Into;
-
-                _dragDropManager.OnNodeSortingDropped(wrappedNodes, wrappedTarget, drop.index);
-                
-            }
-            e.PerformNativeReorder = false;
-        };
-
-        ObjectTreeView.GiveFeedback += (sender, e) =>
-        {
-            // Use custom cursors if the check box is checked.
-            // Sets the custom cursor based upon the effect.
-            //InputManager.
-            if(InputLibrary.Cursor.Self.IsInWindow)
-            {
-                e.UseDefaultCursors = false;
-                System.Windows.Forms.Cursor.Current = AddCursor;
-            }
-        };
-
         static (int index, TreeNode target)? ProcessDrop(TreeNode? originalTarget, MultiSelectTreeView.DropKind kind)
         {
+            if (originalTarget == null)
+            {
+                return null;
+            }
             int? index = kind switch
             {
                 MultiSelectTreeView.DropKind.Into => originalTarget.GetNodeCount(false),
@@ -815,208 +690,18 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             }
 
             return null;
-        } 
+        }
     }
 
-    private void ApplyThemeColors()
+
+    internal void FocusSearch()
     {
-        if (System.Windows.Application.Current is { } current &&
-            current.TryFindResource("Frb.Brushes.Foreground") is SolidColorBrush { Color: var fg } &&
-            current.TryFindResource("Frb.Surface01") is SolidColorBrush { Color: var field } bgBrush)
-        {
-            Color foregroundColor = Color.FromArgb(fg.A, fg.R, fg.G, fg.B);
-            Color fieldColor = Color.FromArgb(field.A, field.R, field.G, field.B);
-            this.ObjectTreeView.ForeColor = mMenuStrip.ForeColor = foregroundColor;
-            this.ObjectTreeView.BackColor = mMenuStrip.BackColor = fieldColor;
-            this.ObjectTreeView.LineColor = ObjectTreeView.BackColor;
-            this.mMenuStrip.Renderer = FrbMenuStripRenderer.GetCurrentThemeRenderer(out _);
-            this.TreeViewHost.Background = bgBrush;
-            (TreeViewHost.Child as ThemedScrollContainer)!.BackColor = fieldColor;
-
-            if (current.TryFindResource("Frb.Brushes.Primary.Transparent") is SolidColorBrush
-                {
-                    Opacity: var primOpacity
-                } T &&
-                current.TryFindResource("Frb.Brushes.Primary") is SolidColorBrush { Color: var primColor })
-            {
-                this.ObjectTreeView.HoverBgColor =
-                    Color.FromArgb(Map01To255(primOpacity), primColor.R, primColor.G, primColor.B);
-                this.ObjectTreeView.SelectedBorderColor =
-                    Color.FromArgb(primColor.A, primColor.R, primColor.G, primColor.B);
-
-                const float defaultFontSize = 9f;
-                UpdateTreeviewIcons(ObjectTreeView.Font.Size / defaultFontSize);
-            }
-        }
-
-        static int Map01To255(double value)
-        {
-            // clamp just in case
-            if (value < 0) value = 0;
-            if (value > 1) value = 1;
-
-            return (int)Math.Round(value * 255);
-        }
+        searchTextBox.Focus();
     }
 
     void IRecipient<ThemeChangedMessage>.Receive(ThemeChangedMessage message)
     {
-        ApplyThemeColors();
-    }
-
-    private ImageList CloneImageList(ImageList original)
-    {
-        // Create a new ImageList with matching properties
-        ImageList copy = new ImageList
-        {
-            ImageSize = original.ImageSize,
-            ColorDepth = original.ColorDepth,
-            TransparentColor = original.TransparentColor
-        };
-
-        // Clone each image from the original list
-        for (int i = 0; i < original.Images.Count; i++)
-        {
-            string key = original.Images.Keys[i];
-            copy.Images.Add(key, (Image)original.Images[i].Clone());
-        }
-
-        return copy;
-    }
-
-
-
-    private void UpdateTreeviewIcons(
-        float scale = 1.0f)
-    {
-        float baseImageSize = 16;
-
-        using (var g = ObjectTreeView.CreateGraphics())
-        {
-            baseImageSize *= (g.DpiX / 96f);
-        }
-        
-        var size = new Size((int)(baseImageSize * scale), (int)(baseImageSize * scale));
-
-        var keyedColors = GetCurrentColorMap();
-        Application app = Application.Current;
-        Color? defaultColor = null;
-        if (app.TryFindResource("Frb.Colors.Primary") is System.Windows.Media.Color dc)
-        {
-            defaultColor = Color.FromArgb(dc.A, dc.R, dc.G, dc.B);
-        }
-
-        ObjectTreeView.ImageList = BuildTintedImageList(unmodifiableImageList, size, keyedColors, defaultColor ?? Color.White);
-
-        // for some reason, after the .net upgrade, the indent doesn't auto-adjust to account
-        // for the size of the images on first load, so we just force it here every time, despite
-        // it playing nice with follow-up size changes.
-        ObjectTreeView.Indent = (int)baseImageSize;
-
-        ImageList BuildTintedImageList(
-            ImageList originalImageList,
-            Size newSize,
-            IDictionary<string, Color>? perKeyColors,
-            Color fallbackColor)
-        {
-            var outList = new ImageList
-            {
-                ImageSize = newSize,
-                ColorDepth = originalImageList.ColorDepth // preserve
-            };
-
-            foreach (string key in originalImageList.Images.Keys)
-            {
-                var src = originalImageList.Images[key];
-
-                // pick the color for this key (fallback if none specified)
-                var tint = (perKeyColors != null && perKeyColors.TryGetValue(key, out var c)) ? c : fallbackColor;
-
-                // resize + tint in one pass
-                var tinted = ResizeAndTint(src, newSize, tint);
-
-                // ImageList takes ownership of the Image; don't dispose tinted here
-                outList.Images.Add(key, tinted);
-            }
-
-            return outList;
-        }
-
-        static Bitmap ResizeAndTint(Image original, Size newSize, Color tint)
-        {
-            // Normalize multipliers: white(1,1,1) * (r,g,b) => tint
-            float r = tint.R / 255f;
-            float g = tint.G / 255f;
-            float b = tint.B / 255f;
-            float a = tint.A / 255f; // scales source alpha; use 1.0f to keep original alpha
-
-            var cm = new ColorMatrix(new float[][]
-            {
-            new float[] { r, 0, 0, 0, 0 },
-            new float[] { 0, g, 0, 0, 0 },
-            new float[] { 0, 0, b, 0, 0 },
-            new float[] { 0, 0, 0, a, 0 },
-            new float[] { 0, 0, 0, 0, 1 }
-            });
-
-            using var ia = new ImageAttributes();
-            ia.SetColorMatrix(cm, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-
-            // 32bpp ARGB ensures we keep transparency nice and crisp
-            var dest = new Bitmap(newSize.Width, newSize.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-
-            using (var graphics = System.Drawing.Graphics.FromImage(dest))
-            {
-                graphics.CompositingQuality = CompositingQuality.HighQuality;
-                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-
-                var rect = new Rectangle(Point.Empty, newSize);
-                // Draw with the color matrix applied
-                graphics.DrawImage(original,
-                            destRect: rect,
-                            srcX: 0, srcY: 0, srcWidth: original.Width, srcHeight: original.Height,
-                            srcUnit: GraphicsUnit.Pixel,
-                            imageAttr: ia);
-            }
-
-            return dest;
-        }
-
-        static Dictionary<string, Color> GetCurrentColorMap()
-        {
-            Application app = Application.Current;
-
-            var manillaColor = (System.Windows.Media.Color)app.FindResource("Frb.Colors.Icon.Manilla");
-            var greenColor = (System.Windows.Media.Color)app.FindResource("Frb.Colors.Icon.Green");
-            var blueColor = (System.Windows.Media.Color)app.FindResource("Frb.Colors.Icon.Blue");
-            var redColor = (System.Windows.Media.Color)app.FindResource("Frb.Colors.Icon.Red");
-            var purpleColor = (System.Windows.Media.Color)app.FindResource("Frb.Colors.Icon.Purple");
-
-            var manilla = System.Drawing.Color.FromArgb(manillaColor.A, manillaColor.R, manillaColor.G, manillaColor.B);
-            var green = System.Drawing.Color.FromArgb(greenColor.A, greenColor.R, greenColor.G, greenColor.B);
-            var blue = System.Drawing.Color.FromArgb(blueColor.A, blueColor.R, blueColor.G, blueColor.B);
-            var red = System.Drawing.Color.FromArgb(redColor.A, redColor.R, redColor.G, redColor.B);
-            var purple = System.Drawing.Color.FromArgb(purpleColor.A, purpleColor.R, purpleColor.G, purpleColor.B);
-
-            return new()
-            {
-                ["Folder.png"] = manilla,
-                ["Component.png"] = green,
-                ["Instance.png"] = blue,
-                ["Screen.png"] = red,
-                ["StandardElement.png"] = purple,
-                ["redExclamation.png"] = red,
-                ["state.png"] = blue,
-                ["behavior.png"] = manilla,
-            };
-        }
-    }
-
-    private void ObjectTreeView_PreviewKeyDown(object? sender, PreviewKeyDownEventArgs e)
-    {
-        int m = 3;
+        _viewCreator.ApplyThemeColors();
     }
 
     private void ObjectTreeView_KeyPress(object? sender, KeyPressEventArgs e)
@@ -1068,17 +753,17 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             string currentDirectory = FileManager.GetDirectory(ObjectFinder.Self.GumProjectSave.FullFileName);
 
             // Let's make sure these folders exist, they better!
-            Directory.CreateDirectory(mStandardElementsTreeNode.GetFullFilePath().FullPath);
-            Directory.CreateDirectory(mScreensTreeNode.GetFullFilePath().FullPath);
-            Directory.CreateDirectory(mComponentsTreeNode.GetFullFilePath().FullPath);
-            Directory.CreateDirectory(mBehaviorsTreeNode.GetFullFilePath().FullPath);
+            Directory.CreateDirectory(mStandardElementsTreeNode.GetFullFilePath()!.FullPath);
+            Directory.CreateDirectory(mScreensTreeNode.GetFullFilePath()!.FullPath);
+            Directory.CreateDirectory(mComponentsTreeNode.GetFullFilePath()!.FullPath);
+            Directory.CreateDirectory(mBehaviorsTreeNode.GetFullFilePath()!.FullPath);
 
 
             // add folders to the screens, entities, and standard elements
-            AddAndRemoveFolderNodesFromFileSystem(mStandardElementsTreeNode.GetFullFilePath().FullPath, mStandardElementsTreeNode.Nodes);
-            AddAndRemoveFolderNodesFromFileSystem(mScreensTreeNode.GetFullFilePath().FullPath, mScreensTreeNode.Nodes);
-            AddAndRemoveFolderNodesFromFileSystem(mComponentsTreeNode.GetFullFilePath().FullPath, mComponentsTreeNode.Nodes);
-            AddAndRemoveFolderNodesFromFileSystem(mBehaviorsTreeNode.GetFullFilePath().FullPath, mBehaviorsTreeNode.Nodes);
+            AddAndRemoveFolderNodesFromFileSystem(mStandardElementsTreeNode.GetFullFilePath()!.FullPath, mStandardElementsTreeNode.Nodes);
+            AddAndRemoveFolderNodesFromFileSystem(mScreensTreeNode.GetFullFilePath()!.FullPath, mScreensTreeNode.Nodes);
+            AddAndRemoveFolderNodesFromFileSystem(mComponentsTreeNode.GetFullFilePath()!.FullPath, mComponentsTreeNode.Nodes);
+            AddAndRemoveFolderNodesFromFileSystem(mBehaviorsTreeNode.GetFullFilePath()!.FullPath, mBehaviorsTreeNode.Nodes);
 
 
             AddNeededButMissingFromFileSystemFolderNodes();
@@ -1096,7 +781,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     private void AddNeededButMissingFromFileSystemFolderNodes()
     {
         var project = ObjectFinder.Self.GumProjectSave;
-
+        System.Diagnostics.Debug.Assert(project != null, "GumProjectSave was null when trying to add missing folder nodes.");
         HashSet<string> neededFolders = new HashSet<string>();
 
         foreach(var element in project.AllElements)
@@ -1127,7 +812,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
         if(treeNode == null)
         {
-            TreeNode parentNode = null;
+            TreeNode? parentNode = null;
             string parentDirectory = string.Empty;
             try
             {
@@ -1152,7 +837,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             }
         }
 
-        return treeNode;
+        return treeNode!;
     }
 
     private void AddAndRemoveFolderNodesFromFileSystem(string currentDirectory, TreeNodeCollection nodesToAddTo)
@@ -1202,22 +887,23 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     bool ShouldShow(StandardElementSave standardElementSave) => string.IsNullOrEmpty(filterText) || standardElementSave.Name.ToLower().Contains(filterText.ToLower());
     bool ShouldShow(BehaviorSave behavior) => string.IsNullOrEmpty(filterText) || behavior.Name?.ToLower().Contains(filterText.ToLower()) == true;
 
-    private void AddAndRemoveScreensComponentsStandardsAndBehaviors(TreeNode folderTreeNode)
+    private void AddAndRemoveScreensComponentsStandardsAndBehaviors()
     {
+        var gumProject = Locator.GetRequiredService<IProjectManager>().GumProjectSave;
         /////////////Early Out////////////////
-        if (ProjectManager.Self.GumProjectSave == null)
+        if (gumProject == null)
             return;
         ////////////End Early Out////////////
 
         // Save off old selected stuff
-        InstanceSave selectedInstance = _selectedState.SelectedInstance;
-        ElementSave selectedElement = _selectedState.SelectedElement;
-        BehaviorSave selectedBehavior = _selectedState.SelectedBehavior;
+        InstanceSave? selectedInstance = _selectedState.SelectedInstance;
+        ElementSave? selectedElement = _selectedState.SelectedElement;
+        BehaviorSave? selectedBehavior = _selectedState.SelectedBehavior;
 
 
         #region Add nodes that haven't been added yet
 
-        foreach (ScreenSave screenSave in ProjectManager.Self.GumProjectSave.Screens)
+        foreach (ScreenSave screenSave in Locator.GetRequiredService<IProjectManager>().GumProjectSave.Screens)
         {
             var treeNode = GetTreeNodeFor(screenSave);
             if (treeNode == null && ShouldShow(screenSave))
@@ -1229,7 +915,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             }
         }
 
-        foreach (ComponentSave componentSave in ProjectManager.Self.GumProjectSave.Components)
+        foreach (ComponentSave componentSave in Locator.GetRequiredService<IProjectManager>().GumProjectSave.Components)
         {
             if (GetTreeNodeFor(componentSave) == null && ShouldShow(componentSave))
             {
@@ -1245,7 +931,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             }
         }
 
-        foreach (StandardElementSave standardSave in ProjectManager.Self.GumProjectSave.StandardElements)
+        foreach (StandardElementSave standardSave in Locator.GetRequiredService<IProjectManager>().GumProjectSave.StandardElements)
         {
             if (standardSave.Name != "Component")
             {
@@ -1256,7 +942,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             }
         }
 
-        foreach(BehaviorSave behaviorSave in ProjectManager.Self.GumProjectSave.Behaviors)
+        foreach(BehaviorSave behaviorSave in Locator.GetRequiredService<IProjectManager>().GumProjectSave.Behaviors)
         {
             if(GetTreeNodeFor(behaviorSave) == null && ShouldShow(behaviorSave))
             {
@@ -1278,12 +964,12 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
         void RemoveScreenRecursively(TreeNode treeNode, int i, TreeNode container)
         {
-            ScreenSave screen = treeNode.Tag as ScreenSave;
+            ScreenSave? screen = treeNode.Tag as ScreenSave;
 
             // If the screen is null, that means that it's a folder TreeNode, so we don't want to remove it
             if (screen != null)
             {
-                if (!ProjectManager.Self.GumProjectSave.Screens.Contains(screen) || !ShouldShow(screen))
+                if (!gumProject.Screens.Contains(screen) || !ShouldShow(screen))
                 {
                     container.Nodes.RemoveAt(i);
                 }
@@ -1305,12 +991,12 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
         void RemoveComponentRecursively(TreeNode treeNode, int i, TreeNode container)
         {
-            ComponentSave component = treeNode.Tag as ComponentSave;
+            ComponentSave? component = treeNode.Tag as ComponentSave;
 
             // If the component is null, that means that it's a folder TreeNode, so we don't want to remove it
             if (component != null)
             {
-                if (!ProjectManager.Self.GumProjectSave.Components.Contains(component) || !ShouldShow(component))
+                if (!gumProject.Components.Contains(component) || !ShouldShow(component))
                 {
                     container.Nodes.RemoveAt(i);
                 }
@@ -1333,9 +1019,9 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         for (int i = mStandardElementsTreeNode.Nodes.Count - 1; i > -1; i-- )
         {
             // Do we want to support folders here?
-            StandardElementSave standardElement = mStandardElementsTreeNode.Nodes[i].Tag as StandardElementSave;
+            StandardElementSave? standardElement = mStandardElementsTreeNode.Nodes[i].Tag as StandardElementSave;
 
-            if (!ProjectManager.Self.GumProjectSave.StandardElements.Contains(standardElement) || !ShouldShow(standardElement))
+            if (standardElement == null || !gumProject.StandardElements.Contains(standardElement) || !ShouldShow(standardElement))
             {
                 mStandardElementsTreeNode.Nodes.RemoveAt(i);
             }
@@ -1343,11 +1029,11 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
         for(int i = mBehaviorsTreeNode.Nodes.Count - 1; i > -1; i--)
         {
-            BehaviorSave behavior = mBehaviorsTreeNode.Nodes[i].Tag as BehaviorSave;
+            BehaviorSave? behavior = mBehaviorsTreeNode.Nodes[i].Tag as BehaviorSave;
 
             if(behavior != null)
             {
-                if(!ProjectManager.Self.GumProjectSave.Behaviors.Contains(behavior) || !ShouldShow(behavior))
+                if(behavior == null || !Locator.GetRequiredService<IProjectManager>().GumProjectSave.Behaviors.Contains(behavior) || !ShouldShow(behavior))
                 {
                     mBehaviorsTreeNode.Nodes.RemoveAt(i);
                 }
@@ -1367,16 +1053,16 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         var screenList = mScreensTreeNode.Nodes;
         for (int i = 0; i < screenList.Count; i++)
         {
-            object treeNode = screenList[i];
-            RefreshUi(treeNode as TreeNode);
+            var treeNode = (TreeNode)screenList[i];
+            RefreshUi(treeNode);
         }
 
         // see above on why we use a for instead foreach
         var componentList = mComponentsTreeNode.Nodes;
         for (int i = 0; i < componentList.Count; i++)
         {
-            object treeNode = componentList[i];
-            RefreshUi(treeNode as TreeNode);
+            var treeNode = (TreeNode)componentList[i];
+            RefreshUi(treeNode);
         }
 
         foreach (TreeNode treeNode in mStandardElementsTreeNode.Nodes)
@@ -1540,7 +1226,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         if (IsInUiInitiatedSelection) return;
         if (instanceSave != null)
         {
-            TreeNode parentTreeNode = GetTreeNodeFor(parent);
+            TreeNode? parentTreeNode = GetTreeNodeFor(parent);
 
             // This could be null if the user started a new project or loaded a different project.
             if (parentTreeNode != null)
@@ -1550,7 +1236,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         }
         else
         {
-            Select((TreeNode)null);
+            Select((TreeNode?)null);
         }
     }
 
@@ -1574,7 +1260,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         {
             var firstItem = list.First();
 
-            TreeNode parentContainer = null;
+            TreeNode? parentContainer = null;
             if(firstItem.ParentContainer != null)
             {
                 parentContainer = GetTreeNodeFor(firstItem.ParentContainer);
@@ -1603,7 +1289,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         }
         else
         {
-            Select((TreeNode)null);
+            Select((TreeNode?)null);
         }
     }
 
@@ -1619,7 +1305,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
                 // why do we explicitly set this here rather than calling Select? If we set it to null without calling that, we don't get the benefit of the 
                 // plugins being notified of a null selection:
                 //ObjectTreeView.SelectedNode = null;
-                Select((TreeNode)null);
+                Select((TreeNode?)null);
 
             }
         }
@@ -1637,7 +1323,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         }
     }
 
-    private void Select(TreeNode treeNode)
+    private void Select(TreeNode? treeNode)
     {
         if (IsInUiInitiatedSelection) return;
 
@@ -1674,6 +1360,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
     /// </summary>
     public void RefreshUi()
     {
+        _collapseToggleService.Clear();
         RecordSelection();
         // brackets are used simply to indicate the recording and selection should
         // go around the rest of the function:
@@ -1683,7 +1370,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
             AddAndRemoveFolderNodes();
 
-            AddAndRemoveScreensComponentsStandardsAndBehaviors(null);
+            AddAndRemoveScreensComponentsStandardsAndBehaviors();
             ObjectTreeView.ResumeLayout(performLayout:true);
 
         }
@@ -1771,7 +1458,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         if(elementSave is ScreenSave || elementSave is ComponentSave)
         {
 
-            string fullPath = null;
+            string fullPath;
             if(elementSave is ScreenSave)
             {
                 fullPath = _fileLocations.ScreensFolder + FileManager.GetDirectory(elementSave.Name);
@@ -1827,7 +1514,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         {
             var instance = instanceNode.Tag as InstanceSave;
 
-            if(!allInstances.Contains(instance))
+            if(instance == null || !allInstances.Contains(instance))
             {
                 instanceNode.Remove();
             }
@@ -1884,7 +1571,11 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
                     desiredParentNode = GetTreeNodeFor(instanceParent, node);
                 }
             }
-            if(desiredParentNode != nodeForInstance.Parent && desiredParentNode != null)
+            if(desiredParentNode != nodeForInstance.Parent && desiredParentNode != null && 
+                // Just in case Gum gets into a weird circular reference situation.
+                // Gum should protect against this at a higher level, but in case it fails to we
+                // don't want to bring down the entire treeview so let's run a last minute check:
+                nodeForInstance != desiredParentNode)
             {
                 nodeForInstance.Remove();
                 desiredParentNode.Nodes.Add(nodeForInstance);
@@ -1948,7 +1639,8 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         }
     }
 
-    private TreeNode AddTreeNodeForInstance(InstanceSave instance, TreeNode parentContainerNode, bool tolerateMissingTypes, HashSet<InstanceSave> pendingAdditions = null)
+    private TreeNode AddTreeNodeForInstance(InstanceSave instance, TreeNode parentContainerNode, 
+        bool tolerateMissingTypes, HashSet<InstanceSave>? pendingAdditions = null)
     {
         TreeNode treeNode = new TreeNode();
 
@@ -1991,7 +1683,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         return treeNode;
     }
 
-    private InstanceSave FindParentInstance(InstanceSave instance)
+    private InstanceSave? FindParentInstance(InstanceSave instance)
     {
         if(instance is BehaviorInstanceSave)
         {
@@ -2003,7 +1695,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             ElementSave element = instance.ParentContainer ?? ObjectFinder.Self.GetElementContainerOf(instance);
 
             string name = instance.Name + ".Parent";
-            VariableSave variable = element.DefaultState.Variables.FirstOrDefault(v => v.Name == name);
+            VariableSave? variable = element.DefaultState.Variables.FirstOrDefault(v => v.Name == name);
 
             if (variable != null && variable.SetsValue && variable.Value != null)
             {
@@ -2151,12 +1843,6 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
     #region Searching
 
-    private FlatSearchListBox CreateFlatSearchList()
-    {
-        var list = new FlatSearchListBox();
-        list.SelectSearchNode += HandleSelectedSearchNode;
-        return list;
-    }
 
 
     private void ReactToFilterTextChanged()
@@ -2187,7 +1873,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
             if(filterText != null)
             {
                 var filterTextLower = filterText.ToLower();
-                var project = GumState.Self.ProjectState.GumProjectSave;
+                var project = _projectState.GumProjectSave;
                 foreach (var screen in project.Screens)
                 {
                     if (screen.Name.ToLower().Contains(filterTextLower))
@@ -2290,87 +1976,6 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
         FlatList.FlatList.Items.Add(vm);
     }
 
-    private System.Windows.Controls.TextBox CreateSearchBoxUi()
-    {
-        searchTextBox = new System.Windows.Controls.TextBox();
-        searchTextBox.SetValue(TextFieldAssist.HasClearButtonProperty, true);
-        searchTextBox.SetValue(HintAssist.HintProperty, "Search...");
-        searchTextBox.SetValue(HintAssist.IsFloatingProperty, false);
-        searchTextBox.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-        searchTextBox.TextChanged += (not, used) => FilterText = searchTextBox.Text;
-        searchTextBox.PreviewKeyDown += (sender, args) =>
-        {
-            bool isCtrlDown = WpfInput.Keyboard.IsKeyDown(WpfInput.Key.LeftCtrl) || WpfInput.Keyboard.IsKeyDown(WpfInput.Key.RightCtrl);
-
-            if (args.Key == WpfInput.Key.Escape)
-            {
-                searchTextBox.Text = null;
-                args.Handled = true;
-                ObjectTreeView.Focus();
-            }
-            else if (args.Key == WpfInput.Key.Back
-             && isCtrlDown)
-            {
-                searchTextBox.Text = null;
-                args.Handled = true;
-            }
-            else if (args.Key == WpfInput.Key.Down)
-            {
-                if(FlatList.FlatList.SelectedIndex < FlatList.FlatList.Items.Count -1)
-                {
-                    FlatList.FlatList.SelectedIndex++;
-                    BringSelectedIntoView();
-                }
-                args.Handled = true;
-            }
-            else if (args.Key == WpfInput.Key.Up)
-            {
-                if (FlatList.FlatList.SelectedIndex > 0)
-                {
-                    FlatList.FlatList.SelectedIndex--;
-                    BringSelectedIntoView();
-                }
-                args.Handled = true;
-            }
-            else if (args.Key == WpfInput.Key.Enter)
-            {
-                args.Handled = true;
-                ObjectTreeView.Focus();
-
-                var selectedItem = FlatList.FlatList.SelectedItem as SearchItemViewModel;
-                if(selectedItem != null)
-                {
-                    HandleSelectedSearchNode(selectedItem);
-
-                    searchTextBox.Text = null;
-                }
-            }
-        };
-
-        return searchTextBox;
-
-        void BringSelectedIntoView()
-        {
-            if (FlatList.FlatList.SelectedItem is { } selected)
-            {
-                FlatList.Dispatcher.BeginInvoke(() => FlatList.FlatList.ScrollIntoView(selected),
-                    DispatcherPriority.Loaded);
-            }
-        }
-    }
-
-    private System.Windows.Controls.CheckBox CreateSearchCheckBoxUi()
-    {
-        deepSearchCheckBox = new System.Windows.Controls.CheckBox();
-        deepSearchCheckBox.IsChecked = false;
-        deepSearchCheckBox.VerticalContentAlignment = System.Windows.VerticalAlignment.Center;
-        deepSearchCheckBox.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
-        deepSearchCheckBox.Content = "Include Variables";
-        deepSearchCheckBox.Checked += (_, _) => ReactToFilterTextChanged();
-
-        return deepSearchCheckBox;
-    }
-
     private void HandleSelectedSearchNode(SearchItemViewModel vm)
     {
         var backingObject = vm?.BackingObject;
@@ -2390,7 +1995,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
                 _selectedState.SelectedBehavior = asBehavior;
 
             searchTextBox.Text = null;
-            FilterText = null;
+            FilterText = string.Empty;
         }
     }
 
@@ -2436,9 +2041,7 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
     void IRecipient<ApplicationStartupMessage>.Receive(ApplicationStartupMessage message)
     {
-        ObjectTreeView.BackColor = Application.Current.TryFindResource("Frb.Colors.Surface01") is System.Windows.Media.Color c
-            ? Color.FromArgb(c.A, c.R, c.G, c.B)
-            : Color.Transparent;
+        _viewCreator.ApplyThemeColors();
     }
 }
 
@@ -2447,82 +2050,206 @@ public partial class ElementTreeViewManager : IRecipient<ThemeChangedMessage>, I
 
 public static class TreeNodeExtensionMethods
 {
-    public static ElementTreeViewManager ElementTreeViewManager { get; set; }
+    public static ElementTreeViewManager ElementTreeViewManager { get; set; } = default!;
+
+    /// <summary>
+    /// Determines whether the tree node represents a Screen element.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if the node's Tag is a ScreenSave instance; otherwise, false.</returns>
     public static bool IsScreenTreeNode(this TreeNode treeNode)
     {
         return treeNode.Tag is ScreenSave;
     }
 
+    /// <summary>
+    /// Determines whether the tree node represents a Component element.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if the node's Tag is a ComponentSave instance; otherwise, false.</returns>
     public static bool IsComponentTreeNode(this TreeNode treeNode)
     {
         return treeNode.Tag is ComponentSave;
     }
 
+    /// <summary>
+    /// Determines whether the tree node represents a Behavior.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if the node's Tag is a BehaviorSave instance; otherwise, false.</returns>
     public static bool IsBehaviorTreeNode(this TreeNode treeNode)
     {
         return treeNode.Tag is BehaviorSave;
     }
 
+    /// <summary>
+    /// Determines whether the tree node represents a Standard element (e.g., Sprite, Text, Container).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if the node's Tag is a StandardElementSave instance; otherwise, false.</returns>
     public static bool IsStandardElementTreeNode(this TreeNode treeNode)
     {
         return treeNode.Tag is StandardElementSave;
     }
 
+    /// <summary>
+    /// Determines whether the tree node represents an instance of an element.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if the node's Tag is an InstanceSave instance; otherwise, false.</returns>
     public static bool IsInstanceTreeNode(this TreeNode treeNode)
     {
         return treeNode.Tag is InstanceSave;
     }
 
+    /// <summary>
+    /// Determines whether the tree node represents a State.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if the node's Tag is a StateSave instance; otherwise, false.</returns>
     public static bool IsStateSaveTreeNode(this TreeNode treeNode)
     {
         return treeNode.Tag is StateSave;
     }
 
+    /// <summary>
+    /// Determines whether the tree node is one of the top-level element container folders
+    /// (Screens, Components, Standard, or Behaviors).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if the node has no Tag (indicating a top-level folder or subfolder); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true for all top-level folders ONLY.
+    /// Use IsTopScreenContainerTreeNode, IsTopComponentContainerTreeNode, IsTopStandardElementTreeNode,
+    /// or IsTopBehaviorTreeNode to check for specific top-level folders only.
+    /// Use IsScreensFolderTreeNode or IsComponentsFolderTreeNode to check for any folder under the
+    /// Screens or Components hierarchy (excluding the top-level folders themselves).
+    /// </remarks>
     public static bool IsTopElementContainerTreeNode(this TreeNode treeNode)
     {
-        return treeNode.Tag == null;
+        return treeNode.Tag == null && treeNode.Parent == null;
     }
 
+    /// <summary>
+    /// Determines whether the tree node is the top-level "Screens" container folder.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is the top-level Screens folder (root "Screens" node); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true ONLY for the top-level "Screens" folder itself, NOT for subfolders within the Screens hierarchy.
+    /// Use IsScreensFolderTreeNode to check for subfolders within the Screens structure.
+    /// </remarks>
     public static bool IsTopScreenContainerTreeNode(this ITreeNode treeNode) =>
         treeNode is TreeNodeWrapper wrapper
         ? wrapper.Node.IsTopScreenContainerTreeNode()
         : false;
 
+    /// <summary>
+    /// Determines whether the tree node is the top-level "Screens" container folder.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is the top-level Screens folder (root "Screens" node with no parent); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true ONLY for the top-level "Screens" folder itself (has no parent and Text is "Screens"),
+    /// NOT for subfolders within the Screens hierarchy. Use IsScreensFolderTreeNode to check for subfolders.
+    /// </remarks>
     public static bool IsTopScreenContainerTreeNode(this TreeNode treeNode)
     {
         return treeNode.Parent == null && treeNode.Text == "Screens";
     }
 
+    /// <summary>
+    /// Determines whether the tree node is the top-level "Behaviors" container folder.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is the top-level Behaviors folder (root "Behaviors" node); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true ONLY for the top-level "Behaviors" folder itself, NOT for any subfolders.
+    /// </remarks>
     public static bool IsTopBehaviorTreeNode(this ITreeNode treeNode) =>
         treeNode is TreeNodeWrapper wrapper
         ? wrapper.Node.IsTopBehaviorTreeNode()
         : false;
 
+    /// <summary>
+    /// Determines whether the tree node is the top-level "Behaviors" container folder.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is the top-level Behaviors folder (root "Behaviors" node with no parent); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true ONLY for the top-level "Behaviors" folder itself (has no parent and Text is "Behaviors"),
+    /// NOT for any subfolders.
+    /// </remarks>
     public static bool IsTopBehaviorTreeNode(this TreeNode treeNode)
     {
         return treeNode.Parent == null && treeNode.Text == "Behaviors";
     }
 
+    /// <summary>
+    /// Determines whether the tree node is the top-level "Components" container folder.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is the top-level Components folder (root "Components" node); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true ONLY for the top-level "Components" folder itself, NOT for subfolders within the Components hierarchy.
+    /// Use IsComponentsFolderTreeNode to check for subfolders within the Components structure.
+    /// </remarks>
     public static bool IsTopComponentContainerTreeNode(this ITreeNode treeNode) =>
         treeNode is TreeNodeWrapper wrapper
         ? wrapper.Node.IsTopComponentContainerTreeNode()
         : false;
 
+    /// <summary>
+    /// Determines whether the tree node is the top-level "Components" container folder.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is the top-level Components folder (root "Components" node with no parent); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true ONLY for the top-level "Components" folder itself (has no parent and Text is "Components"),
+    /// NOT for subfolders within the Components hierarchy. Use IsComponentsFolderTreeNode to check for subfolders.
+    /// </remarks>
     public static bool IsTopComponentContainerTreeNode(this TreeNode treeNode)
     {
         return treeNode.Parent == null && treeNode.Text == "Components";
     }
 
-    public static bool IsTopStandardElementTreeNode(this ITreeNode treeNode) => treeNode is TreeNodeWrapper wrapper 
+    /// <summary>
+    /// Determines whether the tree node is the top-level "Standard" container folder.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is the top-level Standard folder (root "Standard" node); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true ONLY for the top-level "Standard" folder itself, NOT for any subfolders.
+    /// The Standard folder contains built-in element types like Sprite, Text, and Container.
+    /// </remarks>
+    public static bool IsTopStandardElementTreeNode(this ITreeNode treeNode) => treeNode is TreeNodeWrapper wrapper
         ? wrapper.Node.IsTopStandardElementTreeNode()
         : false;
 
+    /// <summary>
+    /// Determines whether the tree node is the top-level "Standard" container folder.
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is the top-level Standard folder (root "Standard" node with no parent); otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true ONLY for the top-level "Standard" folder itself (has no parent and Text is "Standard"),
+    /// NOT for any subfolders. The Standard folder contains built-in element types like Sprite, Text, and Container.
+    /// </remarks>
     public static bool IsTopStandardElementTreeNode(this TreeNode treeNode)
     {
         return treeNode.Parent == null && treeNode.Text == "Standard";
     }
 
-    public static FilePath GetFullFilePath(this TreeNode treeNode)
+    /// <summary>
+    /// Gets the full file path for the element, folder, or behavior represented by the tree node.
+    /// </summary>
+    /// <param name="treeNode">The tree node to get the file path for.</param>
+    /// <returns>
+    /// The full file path as a FilePath object, or null if the project is not saved yet.
+    /// For folders, returns the directory path ending with a backslash.
+    /// For elements and behaviors, returns the full file path including extension.
+    /// </returns>
+    public static FilePath? GetFullFilePath(this TreeNode treeNode)
     {
         if (treeNode.IsTopComponentContainerTreeNode() ||
             treeNode.IsTopStandardElementTreeNode() ||
@@ -2530,15 +2257,15 @@ public static class TreeNodeExtensionMethods
             treeNode.IsTopBehaviorTreeNode()
             )
         {
-            if (ProjectManager.Self.GumProjectSave == null ||
-                string.IsNullOrEmpty(ProjectManager.Self.GumProjectSave.FullFileName))
+            if (Locator.GetRequiredService<IProjectManager>().GumProjectSave == null ||
+                string.IsNullOrEmpty(Locator.GetRequiredService<IProjectManager>().GumProjectSave.FullFileName))
             {
                 Locator.GetRequiredService<IDialogService>().ShowMessage("Project isn't saved yet so the root of the project isn't known");
                 return null;
             }
             else
             {
-                string projectDirectory = FileManager.GetDirectory(ProjectManager.Self.GumProjectSave.FullFileName);
+                string projectDirectory = FileManager.GetDirectory(Locator.GetRequiredService<IProjectManager>().GumProjectSave.FullFileName);
 
                 if (treeNode.IsTopComponentContainerTreeNode())
                 {
@@ -2563,7 +2290,7 @@ public static class TreeNodeExtensionMethods
             treeNode.IsComponentTreeNode() ||
             treeNode.IsScreenTreeNode())
         {
-            ElementSave element = treeNode.Tag as ElementSave;
+            ElementSave element = (ElementSave)treeNode.Tag;
             return treeNode.Parent.GetFullFilePath() + treeNode.Text + "." + element.FileExtension;
         }
         else if(treeNode.IsBehaviorTreeNode())
@@ -2579,18 +2306,40 @@ public static class TreeNodeExtensionMethods
     }
 
     /// <summary>
-    /// Returns whether this node is a folder inside the Screens tree structure. This does not 
-    /// return true for the top-level screen node.
+    /// Determines whether the tree node is a top level or contained folder within the Screens hierarchy 
+    /// (includes the top-level "Screens" folder itself).
     /// </summary>
-    /// <param name="treeNode">The tree node</param>
-    /// <returns>Whether this is a folder inside the screens folder structure</returns>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is a folder anywhere under the top-level "Screens" folder; otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true for ANY folder under the Screens hierarchy, including:
+    /// - Direct child folders of the top-level "Screens" folder (e.g., "Screens/Menus")
+    /// - Nested subfolders at any depth (e.g., "Screens/Menus/MainMenu")
+    /// - The top-level "Screens" folder itself (use IsTopScreenContainerTreeNode for that)
+    /// Returns false for:
+    /// - Screen element nodes (which have a Tag)
+    /// </remarks>
     public static bool IsScreensFolderTreeNode(this ITreeNode? treeNode) =>
         treeNode is TreeNodeWrapper wrapper
         ? wrapper.Node.IsScreensFolderTreeNode()
         : false;
 
 
-    static bool IsScreensFolderTreeNode(this TreeNode treeNode)
+    /// <summary>
+    /// Determines whether the tree node is a top level or contained folder within the Screens hierarchy 
+    /// (includes the top-level "Screens" folder itself).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is a folder anywhere under the top-level "Screens" folder; otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true for ANY folder under the Screens hierarchy, including:
+    /// - Direct child folders of the top-level "Screens" folder (e.g., "Screens/Menus")
+    /// - Nested subfolders at any depth (e.g., "Screens/Menus/MainMenu")
+    /// - The top-level "Screens" folder itself (use IsTopScreenContainerTreeNode for that)
+    /// Returns false for:
+    /// - Screen element nodes (which have a Tag)
+    /// </remarks>
+    public static bool IsScreensFolderTreeNode(this TreeNode treeNode)
     {
         return treeNode.Tag == null &&
             treeNode.Parent != null &&
@@ -2599,9 +2348,31 @@ public static class TreeNodeExtensionMethods
             treeNode.Parent.IsTopScreenContainerTreeNode());
     }
 
+    /// <summary>
+    /// Determines whether the tree node is part of the Screens folder structure
+    /// (either the root Screens folder, a subfolder, or a Screen element within the hierarchy).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this node is anywhere within the Screens folder structure; otherwise, false.</returns>
+    /// <remarks>
+    /// This recursively checks if the node or any of its parents is the root Screens node.
+    /// Unlike IsScreensFolderTreeNode and IsTopScreenContainerTreeNode, this returns true for
+    /// Screen elements themselves, not just folders.
+    /// </remarks>
     public static bool IsPartOfScreensFolderStructure(this ITreeNode treeNode) =>
         (treeNode as TreeNodeWrapper)?.Node.IsPartOfScreensFolderStructure() ?? false;
 
+    /// <summary>
+    /// Determines whether the tree node is part of the Screens folder structure
+    /// (either the root Screens folder, a subfolder, or a Screen element within the hierarchy).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this node is anywhere within the Screens folder structure; otherwise, false.</returns>
+    /// <remarks>
+    /// This recursively checks if the node or any of its parents is the root Screens node.
+    /// Unlike IsScreensFolderTreeNode and IsTopScreenContainerTreeNode, this returns true for
+    /// Screen elements themselves, not just folders.
+    /// </remarks>
     public static bool IsPartOfScreensFolderStructure(this TreeNode treeNode)
     {
         if (treeNode == ElementTreeViewManager.RootScreensTreeNode)
@@ -2613,9 +2384,31 @@ public static class TreeNodeExtensionMethods
         return treeNode.Parent.IsPartOfScreensFolderStructure();
     }
 
+    /// <summary>
+    /// Determines whether the tree node is part of the Components folder structure
+    /// (either the root Components folder, a subfolder, or a Component element within the hierarchy).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this node is anywhere within the Components folder structure; otherwise, false.</returns>
+    /// <remarks>
+    /// This recursively checks if the node or any of its parents is the root Components node.
+    /// Unlike IsComponentsFolderTreeNode and IsTopComponentContainerTreeNode, this returns true for
+    /// Component elements themselves, not just folders.
+    /// </remarks>
     public static bool IsPartOfComponentsFolderStructure(this ITreeNode treeNode) =>
         (treeNode as TreeNodeWrapper)?.Node.IsPartOfComponentsFolderStructure() ?? false;
 
+    /// <summary>
+    /// Determines whether the tree node is part of the Components folder structure
+    /// (either the root Components folder, a subfolder, or a Component element within the hierarchy).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this node is anywhere within the Components folder structure; otherwise, false.</returns>
+    /// <remarks>
+    /// This recursively checks if the node or any of its parents is the root Components node.
+    /// Unlike IsComponentsFolderTreeNode and IsTopComponentContainerTreeNode, this returns true for
+    /// Component elements themselves, not just folders.
+    /// </remarks>
     public static bool IsPartOfComponentsFolderStructure(this TreeNode treeNode)
     {
         if (treeNode == ElementTreeViewManager.RootComponentsTreeNode)
@@ -2627,6 +2420,16 @@ public static class TreeNodeExtensionMethods
         return treeNode.Parent.IsPartOfComponentsFolderStructure();
     }
 
+    /// <summary>
+    /// Determines whether the tree node is part of the Standard elements folder structure
+    /// (either the root Standard folder, a subfolder, or a Standard element within the hierarchy).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this node is anywhere within the Standard elements folder structure; otherwise, false.</returns>
+    /// <remarks>
+    /// This recursively checks if the node or any of its parents is the root Standard elements node.
+    /// Unlike IsTopStandardElementTreeNode, this returns true for Standard element instances themselves, not just folders.
+    /// </remarks>
     public static bool IsPartOfStandardElementsFolderStructure(this TreeNode treeNode)
     {
         if (treeNode == ElementTreeViewManager.RootStandardElementsTreeNode)
@@ -2639,17 +2442,40 @@ public static class TreeNodeExtensionMethods
     }
 
     /// <summary>
-    /// Returns whether this node is a folder node inside the Components tree structure. This does not
-    /// return true for the top-level components node.
+    /// Determines whether the tree node is a folder within the Components hierarchy (excluding the top-level "Components" folder itself).
     /// </summary>
-    /// <param name="treeNode">The tree node</param>
-    /// <returns>Whether this is a folder inside the screens folder structure</returns>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is a folder anywhere under the top-level "Components" folder; otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true for ANY folder under the Components hierarchy, including:
+    /// - Direct child folders of the top-level "Components" folder (e.g., "Components/UI")
+    /// - Nested subfolders at any depth (e.g., "Components/UI/Buttons")
+    /// Returns false for:
+    /// - The top-level "Components" folder itself (use IsTopComponentContainerTreeNode for that)
+    /// - Component element nodes (which have a Tag)
+    /// A node is considered a Components folder if it has no Tag, has a parent, and that parent is either
+    /// the top-level Components container or another Components folder.
+    /// </remarks>
     public static bool IsComponentsFolderTreeNode(this ITreeNode? treeNode) =>
         treeNode is TreeNodeWrapper wrapper
         ? wrapper.Node.IsComponentsFolderTreeNode()
         : false;
 
-    static bool IsComponentsFolderTreeNode(this TreeNode treeNode)
+    /// <summary>
+    /// Determines whether the tree node is a folder within the Components hierarchy 
+    /// (including the top-level "Components" folder itself).
+    /// </summary>
+    /// <param name="treeNode">The tree node to check.</param>
+    /// <returns>True if this is a folder anywhere under and including the top-level "Components" folder; otherwise, false.</returns>
+    /// <remarks>
+    /// This returns true for ANY folder under the Components hierarchy, including:
+    /// - Direct child folders of the top-level "Components" folder (e.g., "Components/UI")
+    /// - Nested subfolders at any depth (e.g., "Components/UI/Buttons")
+    /// - The top-level "Components" folder itself (use IsTopComponentContainerTreeNode for that)
+    /// Returns false for:
+    /// - Component element nodes (which have a Tag)
+    /// </remarks>
+    public static bool IsComponentsFolderTreeNode(this TreeNode treeNode)
     {
         return treeNode.Tag == null &&
             treeNode.Parent != null &&
@@ -2658,6 +2484,20 @@ public static class TreeNodeExtensionMethods
             treeNode.Parent.IsTopComponentContainerTreeNode());
     }
 
+    /// <summary>
+    /// Sorts the tree node collection alphabetically by name, with folders appearing before files.
+    /// </summary>
+    /// <param name="treeNodeCollection">The collection of tree nodes to sort.</param>
+    /// <param name="recursive">
+    /// If true, recursively sorts all child node collections (except within Screen, Component, Standard, or Behavior element nodes).
+    /// Default is false.
+    /// </param>
+    /// <remarks>
+    /// The sort order places folders (Components and Screens subfolders) before individual elements,
+    /// and within each category, nodes are sorted alphabetically by their Text property.
+    /// When recursive is true, the method will not sort children of element nodes (Screen, Component, Standard, Behavior)
+    /// as these typically contain instances and states that should maintain their specific order.
+    /// </remarks>
     public static void SortByName(this TreeNodeCollection treeNodeCollection, bool recursive = false)
     {
         int lastObjectExclusive = treeNodeCollection.Count;
@@ -2739,6 +2579,15 @@ public static class TreeNodeExtensionMethods
         }
     }
 
+    /// <summary>
+    /// Gets all descendant nodes of the tree node in a flattened list, recursively traversing the entire tree structure.
+    /// </summary>
+    /// <param name="treeNode">The tree node whose descendants should be collected.</param>
+    /// <returns>A list containing all child, grandchild, and deeper descendant nodes in depth-first order.</returns>
+    /// <remarks>
+    /// The returned list does not include the tree node itself, only its descendants.
+    /// Nodes are added in depth-first order (parent node's children are added before their siblings' children).
+    /// </remarks>
     public static List<TreeNode> GetAllChildrenNodesRecursively(this TreeNode treeNode)
     {
         List<TreeNode> toReturn = new List<TreeNode>();

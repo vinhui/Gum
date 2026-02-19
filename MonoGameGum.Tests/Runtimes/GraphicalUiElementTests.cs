@@ -46,6 +46,369 @@ public class GraphicalUiElementTests : BaseTestClass
 
     #endregion
 
+    #region Auto Grid
+
+    [Fact]
+    public void AutoGrid_ShouldPositionChildrenInGrid()
+    {
+        ContainerRuntime parent = new();
+        parent.Width = 400;
+        parent.Height = 400;
+        parent.WidthUnits = DimensionUnitType.Absolute;
+        parent.HeightUnits = DimensionUnitType.Absolute;
+
+        parent.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
+        parent.AutoGridHorizontalCells = 2;
+        parent.AutoGridVerticalCells = 2;
+
+        for (int i = 0; i < 4; i++)
+        {
+            ContainerRuntime child = new();
+            parent.AddChild(child);
+        }
+
+        parent.Children[0].AbsoluteX.ShouldBe(0);
+        parent.Children[0].AbsoluteY.ShouldBe(0);
+
+        parent.Children[1].AbsoluteX.ShouldBe(200);
+        parent.Children[1].AbsoluteY.ShouldBe(0);
+
+        parent.Children[2].AbsoluteX.ShouldBe(0);
+        parent.Children[2].AbsoluteY.ShouldBe(200);
+
+        parent.Children[3].AbsoluteX.ShouldBe(200);
+        parent.Children[3].AbsoluteY.ShouldBe(200);
+    }
+
+    [Fact]
+    public void AutoGrid_ShouldPositionChildrenInGrid_WithSpacing()
+    {
+        ContainerRuntime parent = new();
+        parent.Width = 405;
+        parent.Height = 405;
+        parent.WidthUnits = DimensionUnitType.Absolute;
+        parent.HeightUnits = DimensionUnitType.Absolute;
+
+        parent.StackSpacing = 5;
+
+        parent.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
+        parent.AutoGridHorizontalCells = 2;
+        parent.AutoGridVerticalCells = 2;
+
+        for (int i = 0; i < 4; i++)
+        {
+            ContainerRuntime child = new();
+            parent.AddChild(child);
+        }
+
+        parent.Children[0].AbsoluteX.ShouldBe(0);
+        parent.Children[0].AbsoluteY.ShouldBe(0);
+
+        parent.Children[1].AbsoluteX.ShouldBe(205);
+        parent.Children[1].AbsoluteY.ShouldBe(0);
+
+        parent.Children[2].AbsoluteX.ShouldBe(0);
+        parent.Children[2].AbsoluteY.ShouldBe(205);
+
+        parent.Children[3].AbsoluteX.ShouldBe(205);
+        parent.Children[3].AbsoluteY.ShouldBe(205);
+    }
+
+    [Fact]
+    public void AutoGrid_ShouldResizeChildrenToFitGrid()
+    {
+        ContainerRuntime parent = new();
+        parent.Width = 400;
+        parent.Height = 400;
+        parent.WidthUnits = DimensionUnitType.Absolute;
+        parent.HeightUnits = DimensionUnitType.Absolute;
+        parent.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
+        parent.AutoGridHorizontalCells = 2;
+        parent.AutoGridVerticalCells = 2;
+        for (int i = 0; i < 4; i++)
+        {
+            ContainerRuntime child = new();
+            child.Dock(Dock.Fill);
+            parent.AddChild(child);
+        }
+        parent.Children[0].GetAbsoluteWidth().ShouldBe(200);
+        parent.Children[0].GetAbsoluteHeight().ShouldBe(200);
+        parent.Children[1].GetAbsoluteWidth().ShouldBe(200);
+        parent.Children[1].GetAbsoluteHeight().ShouldBe(200);
+        parent.Children[2].GetAbsoluteWidth().ShouldBe(200);
+        parent.Children[2].GetAbsoluteHeight().ShouldBe(200);
+        parent.Children[3].GetAbsoluteWidth().ShouldBe(200);
+        parent.Children[3].GetAbsoluteHeight().ShouldBe(200);
+    }
+
+    [Fact]
+    public void AutoGrid_ShouldResizeChildrenToFitGrid_WithSpacing()
+    {
+        ContainerRuntime parent = new();
+        parent.Width = 405;
+        parent.Height = 405;
+        parent.WidthUnits = DimensionUnitType.Absolute;
+        parent.HeightUnits = DimensionUnitType.Absolute;
+        parent.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
+        parent.AutoGridHorizontalCells = 2;
+        parent.AutoGridVerticalCells = 2;
+
+        parent.StackSpacing = 5;
+
+        for (int i = 0; i < 4; i++)
+        {
+            ContainerRuntime child = new();
+            child.Dock(Dock.Fill);
+            parent.AddChild(child);
+        }
+        parent.Children[0].GetAbsoluteWidth().ShouldBe(200);
+        parent.Children[0].GetAbsoluteHeight().ShouldBe(200);
+        parent.Children[1].GetAbsoluteWidth().ShouldBe(200);
+        parent.Children[1].GetAbsoluteHeight().ShouldBe(200);
+        parent.Children[2].GetAbsoluteWidth().ShouldBe(200);
+        parent.Children[2].GetAbsoluteHeight().ShouldBe(200);
+        parent.Children[3].GetAbsoluteWidth().ShouldBe(200);
+        parent.Children[3].GetAbsoluteHeight().ShouldBe(200);
+    }
+
+    [Fact]
+    public void AutoGridHorizontal_ShouldSizeWidth_AccordingToColumnCount()
+    {
+        ContainerRuntime container = new();
+        container.Width = 0;
+        container.WidthUnits = DimensionUnitType.RelativeToChildren;
+
+        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
+        container.AutoGridHorizontalCells = 2;
+        container.AutoGridVerticalCells = 2;
+
+        container.GetAbsoluteWidth().ShouldBe(0);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        void AddChild()
+        {
+            ContainerRuntime child = new();
+            child.WidthUnits = DimensionUnitType.Absolute;
+            child.Width = 100;
+            container.AddChild(child);
+        }
+    }
+
+    [Fact]
+    public void AutoGridHorizontal_ShouldSizeHeight_AccordingToColumnCount_WithSpillover()
+    {
+        ContainerRuntime container = new();
+        container.Height = 0;
+        container.HeightUnits = DimensionUnitType.RelativeToChildren;
+
+        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
+        container.AutoGridHorizontalCells = 2;
+        container.AutoGridVerticalCells = 2;
+
+        container.GetAbsoluteHeight().ShouldBe(0);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(300);
+
+        AddChild();
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(400);
+
+        void AddChild()
+        {
+            ContainerRuntime child = new();
+            child.HeightUnits = DimensionUnitType.Absolute;
+            child.Height = 100;
+            container.AddChild(child);
+        }
+    }
+
+    [Fact]
+    public void AutoGridHorizontal_SizeRelativeToChildren_ShouldDistributExtraSize_ToAllCells()
+    {
+        ContainerRuntime container = new();
+        container.Width = 100;
+        container.WidthUnits = DimensionUnitType.RelativeToChildren;
+        container.Height = 100;
+        container.HeightUnits = DimensionUnitType.RelativeToChildren;
+
+        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
+        container.AutoGridHorizontalCells = 2;
+        container.AutoGridVerticalCells = 2;
+
+        ContainerRuntime absoluteContainer = new();
+        container.AddChild(absoluteContainer);
+        absoluteContainer.Width = 50;
+        absoluteContainer.WidthUnits = DimensionUnitType.Absolute;
+        absoluteContainer.Height = 50;
+        absoluteContainer.HeightUnits = DimensionUnitType.Absolute;
+
+        ContainerRuntime fillContainer = new();
+        container.AddChild(fillContainer);
+        fillContainer.Dock(Dock.Fill);
+
+        fillContainer.GetAbsoluteWidth().ShouldBe(100);
+        fillContainer.GetAbsoluteHeight().ShouldBe(100);
+        fillContainer.AbsoluteLeft.ShouldBe(100);
+
+        ContainerRuntime fillContainer2 = new();
+        fillContainer2.Name = nameof(fillContainer2);
+        fillContainer2.Dock(Dock.Fill);
+        container.AddChild(fillContainer2);
+
+        fillContainer2.GetAbsoluteWidth().ShouldBe(100);
+        fillContainer2.GetAbsoluteHeight().ShouldBe(100);
+        fillContainer2.AbsoluteLeft.ShouldBe(0);
+        fillContainer2.AbsoluteTop.ShouldBe(100);
+    }
+
+    [Fact]
+    public void AutoGridVertical_ShouldSizeHeight_AccordingToRowCount()
+    {
+        ContainerRuntime container = new();
+        container.Height = 0;
+        container.HeightUnits = DimensionUnitType.RelativeToChildren;
+
+        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridVertical;
+        container.AutoGridHorizontalCells = 2;
+        container.AutoGridVerticalCells = 2;
+
+        container.GetAbsoluteHeight().ShouldBe(0);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteHeight().ShouldBe(200);
+
+        void AddChild()
+        {
+            ContainerRuntime child = new();
+            child.HeightUnits = DimensionUnitType.Absolute;
+            child.Height = 100;
+            container.AddChild(child);
+        }
+    }
+
+    [Fact]
+    public void AutoGridVertical_ShouldSizeWidth_AccordingToRowCount_WithSpillover()
+    {
+        ContainerRuntime container = new();
+        container.Width = 0;
+        container.WidthUnits = DimensionUnitType.RelativeToChildren;
+
+        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridVertical;
+        container.AutoGridHorizontalCells = 2;
+        container.AutoGridVerticalCells = 2;
+
+        container.GetAbsoluteWidth().ShouldBe(0);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(200);
+
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(300);
+
+        AddChild();
+        AddChild();
+        container.GetAbsoluteWidth().ShouldBe(400);
+
+        void AddChild()
+        {
+            ContainerRuntime child = new();
+            child.WidthUnits = DimensionUnitType.Absolute;
+            child.Width = 100;
+            container.AddChild(child);
+        }
+    }
+
+
+    [Fact]
+    public void AutoGridVertical_SizeRelativeToChildren_ShouldDistributExtraSize_ToAllCells()
+    {
+        ContainerRuntime container = new();
+        container.Width = 100;
+        container.WidthUnits = DimensionUnitType.RelativeToChildren;
+        container.Height = 100;
+        container.HeightUnits = DimensionUnitType.RelativeToChildren;
+
+        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridVertical;
+        container.AutoGridHorizontalCells = 2;
+        container.AutoGridVerticalCells = 2;
+
+        ContainerRuntime absoluteContainer = new();
+        container.AddChild(absoluteContainer);
+        absoluteContainer.Width = 50;
+        absoluteContainer.WidthUnits = DimensionUnitType.Absolute;
+        absoluteContainer.Height = 50;
+        absoluteContainer.HeightUnits = DimensionUnitType.Absolute;
+
+        ContainerRuntime fillContainer = new();
+        container.AddChild(fillContainer);
+        fillContainer.Dock(Dock.Fill);
+
+        fillContainer.GetAbsoluteWidth().ShouldBe(100);
+        fillContainer.GetAbsoluteHeight().ShouldBe(100);
+        fillContainer.AbsoluteLeft.ShouldBe(0);
+        fillContainer.AbsoluteTop.ShouldBe(100);
+
+        ContainerRuntime fillContainer2 = new();
+        fillContainer2.Name = nameof(fillContainer2);
+        fillContainer2.Dock(Dock.Fill);
+        container.AddChild(fillContainer2);
+
+        fillContainer2.GetAbsoluteWidth().ShouldBe(100);
+        fillContainer2.GetAbsoluteHeight().ShouldBe(100);
+        fillContainer2.AbsoluteLeft.ShouldBe(100);
+        fillContainer2.AbsoluteTop.ShouldBe(0);
+    }
+
+    #endregion
+
     #region Animation
     static (ComponentSave element, AnimationRuntime animation) CreateElementAndAnimation()
     {
@@ -197,8 +560,168 @@ public class GraphicalUiElementTests : BaseTestClass
         }
         didThrow.ShouldBeTrue();
     }
+
+    [Fact]
+    public void AnimationController_ShouldNotBeNull()
+    {
+        var gue = new GraphicalUiElement(new InvisibleRenderable());
+
+        gue.AnimationController.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void AnimationController_Pause_ShouldPauseAnimation()
+    {
+        var (element, animation) = CreateElementAndAnimation();
+        var gue = new GraphicalUiElement(new InvisibleRenderable())
+        {
+            ElementSave = element
+        };
+
+        gue.PlayAnimation(animation);
+        gue.AnimateSelf(0.3);
+        gue.X.ShouldBeInRange(29.99f, 30.01f);
+
+        gue.AnimationController.Pause();
+        gue.AnimateSelf(0.5);
+
+        // Should still be at 30 because animation is paused
+        // tolerate floating point imprecision with a range check
+        gue.X.ShouldBeInRange(29.99f, 30.01f);
+        gue.AnimationController.IsPaused.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void AnimationController_Resume_ShouldResumeAnimation()
+    {
+        var (element, animation) = CreateElementAndAnimation();
+        var gue = new GraphicalUiElement(new InvisibleRenderable())
+        {
+            ElementSave = element
+        };
+
+        gue.PlayAnimation(animation);
+        gue.AnimateSelf(0.3);
+        gue.AnimationController.Pause();
+        gue.AnimationController.Resume();
+        gue.AnimateSelf(0.2);
+
+        gue.X.ShouldBe(50f);
+        gue.AnimationController.IsPlaying.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void AnimationController_OnCompleted_ShouldFireWhenAnimationCompletes()
+    {
+        var (element, animation) = CreateElementAndAnimation();
+        animation.Loops = false;
+        var gue = new GraphicalUiElement(new InvisibleRenderable())
+        {
+            ElementSave = element
+        };
+
+        bool completedEventFired = false;
+        gue.AnimationController.OnCompleted += () => completedEventFired = true;
+
+        gue.PlayAnimation(animation);
+        gue.AnimateSelf(1.5); // Exceeds animation length of 1.0
+
+        completedEventFired.ShouldBeTrue();
+        gue.AnimationController.IsStopped.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void AnimationController_StateProperties_ShouldReflectPlaybackState()
+    {
+        var (element, animation) = CreateElementAndAnimation();
+        var gue = new GraphicalUiElement(new InvisibleRenderable())
+        {
+            ElementSave = element
+        };
+
+        gue.AnimationController.IsStopped.ShouldBeTrue();
+
+        gue.PlayAnimation(animation);
+        gue.AnimationController.IsPlaying.ShouldBeTrue();
+        gue.AnimationController.CurrentAnimation.ShouldNotBeNull();
+
+        gue.AnimationController.Pause();
+        gue.AnimationController.IsPaused.ShouldBeTrue();
+
+        gue.StopAnimation();
+        gue.AnimationController.IsStopped.ShouldBeTrue();
+    }
     #endregion
 
+    #region ApplyState
+    [Fact]
+    public void ApplyState_ShouldApplyVariables()
+    {
+        ContainerRuntime container = new();
+        StateSave state = new();
+
+        state.Variables.Add(new VariableSave
+        {
+            Name = "X",
+            Value = 42f
+        });
+
+        state.Variables.Add(new VariableSave
+        {
+            Name = "Y",
+            Value = 84f
+        });
+
+        container.ApplyState(state);
+
+        container.X.ShouldBe(42f);
+        container.Y.ShouldBe(84f);
+    }
+
+    [Fact]
+    public void ApplyState_ShouldSuspendLayout_ToReduceLayoutCallCount()
+    {
+        ContainerRuntime container = new();
+        container.Dock(Dock.Fill);
+
+        StateSave state = new();
+
+        state.Variables.Add(new VariableSave
+        {
+            Name = "X",
+            Value = 11f
+        });
+
+        state.Variables.Add(new VariableSave
+        {
+            Name = "Y",
+            Value = 12f
+        });
+
+        state.Variables.Add(new VariableSave
+        {
+            Name = "Width",
+            Value = 13f
+        });
+
+
+        state.Variables.Add(new VariableSave
+        {
+            Name = "Height",
+            Value = 14f
+        });
+        int callCountBeforeApply = GraphicalUiElement.UpdateLayoutCallCount;
+
+        container.ApplyState(state);
+
+        int callCountAfterApply = GraphicalUiElement.UpdateLayoutCallCount;
+
+        callCountAfterApply.ShouldBe(callCountBeforeApply + 1);
+    }
+
+    #endregion
+
+    #region FillListWithChildrenByType
     [Fact]
     public void FillListWithChildrenByType_ShouldFillRecursively()
     {
@@ -216,6 +739,8 @@ public class GraphicalUiElementTests : BaseTestClass
         list[0].ShouldBeOfType<SpriteRuntime>();
         list[1].ShouldBeOfType<SpriteRuntime>();
     }
+
+    #endregion
 
     #region Layout-related (Units, Width, Height)
 
@@ -866,369 +1391,6 @@ public class GraphicalUiElementTests : BaseTestClass
 
     #endregion
 
-    #region Auto Grid
-
-    [Fact]
-    public void AutoGrid_ShouldPositionChildrenInGrid()
-    {
-        ContainerRuntime parent = new();
-        parent.Width = 400;
-        parent.Height = 400;
-        parent.WidthUnits = DimensionUnitType.Absolute;
-        parent.HeightUnits = DimensionUnitType.Absolute;
-
-        parent.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
-        parent.AutoGridHorizontalCells = 2;
-        parent.AutoGridVerticalCells = 2;
-
-        for (int i = 0; i < 4; i++)
-        {
-            ContainerRuntime child = new();
-            parent.AddChild(child);
-        }
-
-        parent.Children[0].AbsoluteX.ShouldBe(0);
-        parent.Children[0].AbsoluteY.ShouldBe(0);
-
-        parent.Children[1].AbsoluteX.ShouldBe(200);
-        parent.Children[1].AbsoluteY.ShouldBe(0);
-
-        parent.Children[2].AbsoluteX.ShouldBe(0);
-        parent.Children[2].AbsoluteY.ShouldBe(200);
-
-        parent.Children[3].AbsoluteX.ShouldBe(200);
-        parent.Children[3].AbsoluteY.ShouldBe(200);
-    }
-
-    [Fact]
-    public void AutoGrid_ShouldPositionChildrenInGrid_WithSpacing()
-    {
-        ContainerRuntime parent = new();
-        parent.Width = 405;
-        parent.Height = 405;
-        parent.WidthUnits = DimensionUnitType.Absolute;
-        parent.HeightUnits = DimensionUnitType.Absolute;
-
-        parent.StackSpacing = 5;
-
-        parent.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
-        parent.AutoGridHorizontalCells = 2;
-        parent.AutoGridVerticalCells = 2;
-
-        for (int i = 0; i < 4; i++)
-        {
-            ContainerRuntime child = new();
-            parent.AddChild(child);
-        }
-
-        parent.Children[0].AbsoluteX.ShouldBe(0);
-        parent.Children[0].AbsoluteY.ShouldBe(0);
-
-        parent.Children[1].AbsoluteX.ShouldBe(205);
-        parent.Children[1].AbsoluteY.ShouldBe(0);
-
-        parent.Children[2].AbsoluteX.ShouldBe(0);
-        parent.Children[2].AbsoluteY.ShouldBe(205);
-
-        parent.Children[3].AbsoluteX.ShouldBe(205);
-        parent.Children[3].AbsoluteY.ShouldBe(205);
-    }
-
-    [Fact]
-    public void AutoGrid_ShouldResizeChildrenToFitGrid()
-    {
-        ContainerRuntime parent = new();
-        parent.Width = 400;
-        parent.Height = 400;
-        parent.WidthUnits = DimensionUnitType.Absolute;
-        parent.HeightUnits = DimensionUnitType.Absolute;
-        parent.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
-        parent.AutoGridHorizontalCells = 2;
-        parent.AutoGridVerticalCells = 2;
-        for (int i = 0; i < 4; i++)
-        {
-            ContainerRuntime child = new();
-            child.Dock(Dock.Fill);
-            parent.AddChild(child);
-        }
-        parent.Children[0].GetAbsoluteWidth().ShouldBe(200);
-        parent.Children[0].GetAbsoluteHeight().ShouldBe(200);
-        parent.Children[1].GetAbsoluteWidth().ShouldBe(200);
-        parent.Children[1].GetAbsoluteHeight().ShouldBe(200);
-        parent.Children[2].GetAbsoluteWidth().ShouldBe(200);
-        parent.Children[2].GetAbsoluteHeight().ShouldBe(200);
-        parent.Children[3].GetAbsoluteWidth().ShouldBe(200);
-        parent.Children[3].GetAbsoluteHeight().ShouldBe(200);
-    }
-
-    [Fact]
-    public void AutoGrid_ShouldResizeChildrenToFitGrid_WithSpacing()
-    {
-        ContainerRuntime parent = new();
-        parent.Width = 405;
-        parent.Height = 405;
-        parent.WidthUnits = DimensionUnitType.Absolute;
-        parent.HeightUnits = DimensionUnitType.Absolute;
-        parent.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
-        parent.AutoGridHorizontalCells = 2;
-        parent.AutoGridVerticalCells = 2;
-
-        parent.StackSpacing = 5;
-
-        for (int i = 0; i < 4; i++)
-        {
-            ContainerRuntime child = new();
-            child.Dock(Dock.Fill);
-            parent.AddChild(child);
-        }
-        parent.Children[0].GetAbsoluteWidth().ShouldBe(200);
-        parent.Children[0].GetAbsoluteHeight().ShouldBe(200);
-        parent.Children[1].GetAbsoluteWidth().ShouldBe(200);
-        parent.Children[1].GetAbsoluteHeight().ShouldBe(200);
-        parent.Children[2].GetAbsoluteWidth().ShouldBe(200);
-        parent.Children[2].GetAbsoluteHeight().ShouldBe(200);
-        parent.Children[3].GetAbsoluteWidth().ShouldBe(200);
-        parent.Children[3].GetAbsoluteHeight().ShouldBe(200);
-    }
-
-    [Fact]
-    public void AutoGridHorizontal_ShouldSizeWidth_AccordingToColumnCount()
-    {
-        ContainerRuntime container = new();
-        container.Width = 0;
-        container.WidthUnits = DimensionUnitType.RelativeToChildren;
-
-        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
-        container.AutoGridHorizontalCells = 2;
-        container.AutoGridVerticalCells = 2;
-
-        container.GetAbsoluteWidth().ShouldBe(0);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        void AddChild()
-        {
-            ContainerRuntime child = new();
-            child.WidthUnits = DimensionUnitType.Absolute;
-            child.Width = 100;
-            container.AddChild(child);
-        }
-    }
-
-    [Fact]
-    public void AutoGridHorizontal_ShouldSizeHeight_AccordingToColumnCount_WithSpillover()
-    {
-        ContainerRuntime container = new();
-        container.Height = 0;
-        container.HeightUnits = DimensionUnitType.RelativeToChildren;
-
-        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
-        container.AutoGridHorizontalCells = 2;
-        container.AutoGridVerticalCells = 2;
-
-        container.GetAbsoluteHeight().ShouldBe(0);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(300);
-
-        AddChild();
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(400);
-
-        void AddChild()
-        {
-            ContainerRuntime child = new();
-            child.HeightUnits = DimensionUnitType.Absolute;
-            child.Height = 100;
-            container.AddChild(child);
-        }
-    }
-
-    [Fact]
-    public void AutoGridHorizontal_SizeRelativeToChildren_ShouldDistributExtraSize_ToAllCells()
-    {
-        ContainerRuntime container = new();
-        container.Width = 100;
-        container.WidthUnits = DimensionUnitType.RelativeToChildren;
-        container.Height = 100;
-        container.HeightUnits = DimensionUnitType.RelativeToChildren;
-
-        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridHorizontal;
-        container.AutoGridHorizontalCells = 2;
-        container.AutoGridVerticalCells = 2;
-
-        ContainerRuntime absoluteContainer = new();
-        container.AddChild(absoluteContainer);
-        absoluteContainer.Width = 50;
-        absoluteContainer.WidthUnits = DimensionUnitType.Absolute;
-        absoluteContainer.Height = 50;
-        absoluteContainer.HeightUnits = DimensionUnitType.Absolute;
-
-        ContainerRuntime fillContainer = new();
-        container.AddChild(fillContainer);
-        fillContainer.Dock(Dock.Fill);
-
-        fillContainer.GetAbsoluteWidth().ShouldBe(100);
-        fillContainer.GetAbsoluteHeight().ShouldBe(100);
-        fillContainer.AbsoluteLeft.ShouldBe(100);
-
-        ContainerRuntime fillContainer2 = new();
-        fillContainer2.Name = nameof(fillContainer2);
-        fillContainer2.Dock(Dock.Fill);
-        container.AddChild(fillContainer2);
-
-        fillContainer2.GetAbsoluteWidth().ShouldBe(100);
-        fillContainer2.GetAbsoluteHeight().ShouldBe(100);
-        fillContainer2.AbsoluteLeft.ShouldBe(0);
-        fillContainer2.AbsoluteTop.ShouldBe(100);
-    }
-
-    [Fact]
-    public void AutoGridVertical_ShouldSizeHeight_AccordingToRowCount()
-    {
-        ContainerRuntime container = new();
-        container.Height = 0;
-        container.HeightUnits = DimensionUnitType.RelativeToChildren;
-
-        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridVertical;
-        container.AutoGridHorizontalCells = 2;
-        container.AutoGridVerticalCells = 2;
-
-        container.GetAbsoluteHeight().ShouldBe(0);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteHeight().ShouldBe(200);
-
-        void AddChild()
-        {
-            ContainerRuntime child = new();
-            child.HeightUnits = DimensionUnitType.Absolute;
-            child.Height = 100;
-            container.AddChild(child);
-        }
-    }
-
-    [Fact]
-    public void AutoGridVertical_ShouldSizeWidth_AccordingToRowCount_WithSpillover()
-    {
-        ContainerRuntime container = new();
-        container.Width = 0;
-        container.WidthUnits = DimensionUnitType.RelativeToChildren;
-
-        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridVertical;
-        container.AutoGridHorizontalCells = 2;
-        container.AutoGridVerticalCells = 2;
-
-        container.GetAbsoluteWidth().ShouldBe(0);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(200);
-
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(300);
-
-        AddChild();
-        AddChild();
-        container.GetAbsoluteWidth().ShouldBe(400);
-
-        void AddChild()
-        {
-            ContainerRuntime child = new();
-            child.WidthUnits = DimensionUnitType.Absolute;
-            child.Width = 100;
-            container.AddChild(child);
-        }
-    }
-
-
-    [Fact]
-    public void AutoGridVertical_SizeRelativeToChildren_ShouldDistributExtraSize_ToAllCells()
-    {
-        ContainerRuntime container = new();
-        container.Width = 100;
-        container.WidthUnits = DimensionUnitType.RelativeToChildren;
-        container.Height = 100;
-        container.HeightUnits = DimensionUnitType.RelativeToChildren;
-
-        container.ChildrenLayout = Gum.Managers.ChildrenLayout.AutoGridVertical;
-        container.AutoGridHorizontalCells = 2;
-        container.AutoGridVerticalCells = 2;
-
-        ContainerRuntime absoluteContainer = new();
-        container.AddChild(absoluteContainer);
-        absoluteContainer.Width = 50;
-        absoluteContainer.WidthUnits = DimensionUnitType.Absolute;
-        absoluteContainer.Height = 50;
-        absoluteContainer.HeightUnits = DimensionUnitType.Absolute;
-
-        ContainerRuntime fillContainer = new();
-        container.AddChild(fillContainer);
-        fillContainer.Dock(Dock.Fill);
-
-        fillContainer.GetAbsoluteWidth().ShouldBe(100);
-        fillContainer.GetAbsoluteHeight().ShouldBe(100);
-        fillContainer.AbsoluteLeft.ShouldBe(0);
-        fillContainer.AbsoluteTop.ShouldBe(100);
-
-        ContainerRuntime fillContainer2 = new();
-        fillContainer2.Name = nameof(fillContainer2);
-        fillContainer2.Dock(Dock.Fill);
-        container.AddChild(fillContainer2);
-
-        fillContainer2.GetAbsoluteWidth().ShouldBe(100);
-        fillContainer2.GetAbsoluteHeight().ShouldBe(100);
-        fillContainer2.AbsoluteLeft.ShouldBe(100);
-        fillContainer2.AbsoluteTop.ShouldBe(0);
-    }
-
-    #endregion
-
     #region Parent/Children related
 
     [Fact]
@@ -1357,6 +1519,22 @@ public class GraphicalUiElementTests : BaseTestClass
 
     #endregion
 
+    #region RemoveChild
+
+    [Fact]
+    public void RemoveChild_ShouldSetParentToNull()
+    {
+        ContainerRuntime parent = new ();
+        ContainerRuntime child = new ();
+        parent.AddChild(child);
+        parent.RemoveChild(child);
+        child.Parent.ShouldBeNull();
+    }
+
+    #endregion
+
+    #region RemoveFromRoot
+
     [Fact]
     public void RemoveFromRoot_ShouldRemoveFromRootCorrectly()
     {
@@ -1366,6 +1544,8 @@ public class GraphicalUiElementTests : BaseTestClass
         child.Parent.ShouldBeNull();
         GumService.Default.Root.Children.ShouldNotContain(child);
     }
+
+    #endregion
 
     [Fact]
     public void SetRenderable_NameMatches()

@@ -1,7 +1,10 @@
-﻿using Gum.Wireframe;
-using GumRuntime;
+﻿using Gum.Forms;
 using Gum.Forms.Controls;
+using Gum.Managers;
+using Gum.Wireframe;
+using GumRuntime;
 using MonoGameGum.Renderables;
+using Moq;
 using RenderingLibrary;
 using RenderingLibrary.Content;
 using RenderingLibrary.Graphics;
@@ -38,7 +41,7 @@ public class TestAssemblyInitializeBase : XunitTestFramework
         ElementSaveExtensions.CustomCreateGraphicalComponentFunc = RenderableCreator.HandleCreateGraphicalComponent;
 
 
-        Gum.Forms.FormsUtilities.InitializeDefaults(defaultVisualsVersion: visualVersion);
+        FormsUtilities.InitializeDefaults(defaultVisualsVersion: visualVersion);
         CreateStubbedFonts();
 
         InitializeGumService();
@@ -52,7 +55,10 @@ public class TestAssemblyInitializeBase : XunitTestFramework
         Renderer.Self.Camera.ClientHeight = 600;
 
         GumService.Default.Root.UpdateLayout();
+
+        StandardElementsManager.Self.Initialize();
     }
+
 
     private void InitializeGumService()
     {

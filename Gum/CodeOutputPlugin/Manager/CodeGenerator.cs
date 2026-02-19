@@ -3,11 +3,13 @@ using Gum.Converters;
 using Gum.DataTypes;
 using Gum.DataTypes.Behaviors;
 using Gum.DataTypes.Variables;
+using Gum.Localization;
 using Gum.Managers;
 using Gum.Reflection;
 using Gum.StateAnimation.SaveClasses;
 using RenderingLibrary.Graphics;
 using RenderingLibrary.Math;
+using SharpDX.DirectWrite;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -251,7 +253,7 @@ public class CodeGenerator
     #region CodeGenerator Fields/Properties
 
     private readonly CodeGenerationNameVerifier _codeGenerationNameVerifier;
-    private readonly LocalizationManager _localizationManager;
+    private readonly LocalizationService _localizationService;
 
     public static int CanvasWidth { get; set; } = 480;
     public static int CanvasHeight { get; set; } = 854;
@@ -266,10 +268,10 @@ public class CodeGenerator
 
     #endregion
     
-    public CodeGenerator(CodeGenerationNameVerifier codeGenerationNameVerifier, LocalizationManager localizationManager)
+    public CodeGenerator(CodeGenerationNameVerifier codeGenerationNameVerifier, LocalizationService localizationService)
     {
         _codeGenerationNameVerifier = codeGenerationNameVerifier;
-        _localizationManager = localizationManager;
+        _localizationService = localizationService;
     }
 
     #region Using Statements
@@ -374,16 +376,21 @@ public class CodeGenerator
 
     public string GetElementNamespace(ElementSave element, CodeOutputElementSettings? elementSettings, CodeOutputProjectSettings projectSettings)
     {
+        return GetElementNamespace(element.Name, element.GetType(), elementSettings, projectSettings);
+    }
+
+    public string GetElementNamespace(string elementName, Type elementType, CodeOutputElementSettings? elementSettings, CodeOutputProjectSettings projectSettings)
+    { 
         var namespaceName = elementSettings?.Namespace ?? string.Empty;
 
         if (string.IsNullOrEmpty(namespaceName) && !string.IsNullOrWhiteSpace(projectSettings.RootNamespace))
         {
             namespaceName = projectSettings.RootNamespace;
-            if (element is ScreenSave)
+            if (elementType == typeof(ScreenSave))
             {
                 namespaceName += ".Screens";
             }
-            else if (element is ComponentSave)
+            else if (elementType == typeof(ComponentSave))
             {
                 namespaceName += ".Components";
             }
@@ -394,7 +401,7 @@ public class CodeGenerator
 
             if(projectSettings.AppendFolderToNamespace)
             {
-                var splitElementName = element.Name.Replace("\\", "/").Split('/').ToArray();
+                var splitElementName = elementName.Replace("\\", "/").Split('/').ToArray();
                 var splitPrefix = splitElementName.Take(splitElementName.Length - 1).ToArray();
                 var whatToAppend = string.Join(".", splitPrefix);
                 if (!string.IsNullOrEmpty(whatToAppend))
@@ -443,8 +450,13 @@ public class CodeGenerator
     
     public string? GetClassNameForType(IStateContainer container, VisualApi visualApi, CodeGenerationContext context, bool isFullyQualified = false) =>
         GetClassNameForType(container, visualApi, context, out _, isFullyQualified);
-    
+
     public string? GetClassNameForType(IStateContainer container, VisualApi visualApi, CodeGenerationContext context, out bool isPrefixed, bool isFullyQualified = false)
+    {
+        return GetClassNameForType(container.Name, container.GetType(), visualApi, context, out isPrefixed, isFullyQualified);
+    }
+
+    public string? GetClassNameForType(string gumName, Type elementType, VisualApi visualApi, CodeGenerationContext context, out bool isPrefixed, bool isFullyQualified = false)
     {
         isPrefixed = false;
         
@@ -453,7 +465,7 @@ public class CodeGenerator
 
         if (visualApi == VisualApi.XamarinForms)
         {
-            switch (container.Name)
+            switch (gumName)
             {
                 case "Text":
                     className = "Label";
@@ -465,9 +477,9 @@ public class CodeGenerator
         if (context.CodeOutputProjectSettings.OutputLibrary == OutputLibrary.MonoGameForms)
         {
             // see if it's a forms object:
-            if (container is ScreenSave or ComponentSave)
+            if (elementType == typeof(ScreenSave) || elementType == typeof(ComponentSave))
             {
-                var strippedType = container.Name;
+                var strippedType = gumName;
                 if (strippedType.Contains("/"))
                 {
                     strippedType = strippedType.Substring(strippedType.LastIndexOf("/") + 1);
@@ -485,7 +497,7 @@ public class CodeGenerator
         if (!specialHandledCase)
         {
 
-            var strippedType = container.Name;
+            var strippedType = gumName;
             if (strippedType.Contains("/"))
             {
                 strippedType = strippedType.Substring(strippedType.LastIndexOf("/") + 1);
@@ -501,9 +513,9 @@ public class CodeGenerator
 
         className = className == null ? string.Empty : _codeGenerationNameVerifier.ToCSharpName(className);
 
-        if(isFullyQualified && container is ElementSave elementSave)
+        if(isFullyQualified && typeof(ElementSave).IsAssignableFrom(elementType))
         {
-            var prefixNamespace = GetElementNamespace(elementSave, context.ElementSettings, context.CodeOutputProjectSettings);
+            var prefixNamespace = GetElementNamespace(gumName, elementType, context.ElementSettings, context.CodeOutputProjectSettings);
             // If we don't have a namespace specified for the project, this can be empty
             if(!string.IsNullOrWhiteSpace(prefixNamespace))
             {
@@ -596,7 +608,7 @@ public class CodeGenerator
         else
         {
             inheritance = element.BaseType;
-            if (inheritance.Contains("/") == true)
+            if (inheritance?.Contains("/") == true)
             {
                 inheritance = inheritance.Substring(inheritance.LastIndexOf('/') + 1);
             }
@@ -4633,7 +4645,7 @@ public class CodeGenerator
 
         #endregion
 
-        else if (GetIsShouldBeLocalized(variable, context.Element.DefaultState, _localizationManager))
+        else if (GetIsShouldBeLocalized(variable, context.Element.DefaultState, _localizationService))
         {
             string assignment = GetLocalizedLine(variable, context);
 
@@ -4979,7 +4991,7 @@ public class CodeGenerator
                 return $"{context.CodePrefixNoTabs}.SetProperty(\"{variable.GetRootName()}\", \"{variable.Value}\");";
             }
         }
-        else if (GetIsShouldBeLocalized(variable, context.Element.DefaultState, _localizationManager))
+        else if (GetIsShouldBeLocalized(variable, context.Element.DefaultState, _localizationService))
         {
             string assignment = GetLocalizedLine(variable, context);
 
@@ -5077,9 +5089,9 @@ public class CodeGenerator
         return assignment;
     }
 
-    private static bool GetIsShouldBeLocalized(VariableSave variable, StateSave defaultState, LocalizationManager localizationManager)
+    private static bool GetIsShouldBeLocalized(VariableSave variable, StateSave defaultState, LocalizationService localizationService)
     {
-        var toReturn = localizationManager.HasDatabase &&
+        var toReturn = localizationService.HasDatabase &&
             // This could be exposed of exposed, so the name wouldn't be "Text"
             //variable.GetRootName() == "Text" && 
             variable.Value is string valueAsString &&
@@ -5090,7 +5102,7 @@ public class CodeGenerator
         return toReturn;
     }
     public static string StringIdPrefix = "T_";
-    public static string FormattedLocalizationCode = "Strings.Get(\"{0}\")";
+    public static string FormattedLocalizationCode = "GumService.Default.LocalizationService.Translate(\"{0}\")";
 
     private void TryGenerateApplyLocalizationForInstance(CodeGenerationContext context, StringBuilder stringBuilder)
     {
@@ -5115,7 +5127,7 @@ public class CodeGenerator
 
     private void GenerateApplyLocalizationMethod(ElementSave element, int tabCount, StringBuilder stringBuilder)
     {
-        if (_localizationManager.HasDatabase)
+        if (_localizationService.HasDatabase)
         {
             // Vic says - we may want this to be recursive eventually, but that introduces
             // some complexity. How do we know which views have a call available? 
@@ -5136,7 +5148,7 @@ public class CodeGenerator
                 context.Instance = instance;
                 if (instance != null)
                 {
-                    if (GetIsShouldBeLocalized(variable, context.Element.DefaultState, _localizationManager))
+                    if (GetIsShouldBeLocalized(variable, context.Element.DefaultState, _localizationService))
                     {
                         string assignment = GetLocalizedLine(variable, context);
                         stringBuilder.AppendLine(ToTabs(tabCount) + assignment);
@@ -5267,7 +5279,7 @@ public class CodeGenerator
             }
 
             var baseHasMain = baseElement != null &&
-                projectSettings.BaseTypesNotCodeGenerated?.Contains(element.BaseType) != true &&
+                projectSettings.BaseTypesNotCodeGenerated?.Contains(element.BaseType!) != true &&
                 GetIfShouldAddMainLayout(baseElement, projectSettings);
             if (!baseHasMain)
             {

@@ -19,6 +19,9 @@ using Gum.Commands;
 using Gum.Plugins.InternalPlugins.VariableGrid.ViewModels;
 using Gum.Services.Dialogs;
 using Gum.Wireframe;
+using Gum.Localization;
+using Gum.Reflection;
+using Gum.Plugins;
 
 namespace Gum.Managers;
 
@@ -32,11 +35,14 @@ public partial class PropertyGridManager
     private readonly IGuiCommands _guiCommands;
     private readonly IFileCommands _fileCommands;
     private readonly ObjectFinder _objectFinder;
-    private readonly SetVariableLogic _setVariableLogic;
+    private readonly ISetVariableLogic _setVariableLogic;
     private readonly IDialogService _dialogService;
-    private readonly LocalizationManager _localizationManager;
+    private readonly LocalizationService _localizationService;
     private readonly ITabManager _tabManager;
-    private readonly WireframeObjectManager _wireframeObjectManager;
+    private readonly IWireframeObjectManager _wireframeObjectManager;
+    private readonly TypeManager _typeManager;
+    private readonly IPluginManager _pluginManager;
+    private readonly IProjectState _projectState;
     WpfDataUi.DataUiGrid mVariablesDataGrid;
     MainPropertyGrid mainControl;
 
@@ -111,12 +117,15 @@ public partial class PropertyGridManager
             Locator.GetRequiredService<IUndoManager>();
         _guiCommands = Locator.GetRequiredService<IGuiCommands>();
         _objectFinder = ObjectFinder.Self;
-        _setVariableLogic = Locator.GetRequiredService<SetVariableLogic>();
+        _setVariableLogic = Locator.GetRequiredService<ISetVariableLogic>();
         _dialogService = Locator.GetRequiredService<IDialogService>();
         _fileCommands = Locator.GetRequiredService<IFileCommands>();
-        _localizationManager = Locator.GetRequiredService<LocalizationManager>();
+        _localizationService = Locator.GetRequiredService<LocalizationService>();
         _tabManager = Locator.GetRequiredService<ITabManager>();
-        _wireframeObjectManager = Locator.GetRequiredService<WireframeObjectManager>();
+        _wireframeObjectManager = Locator.GetRequiredService<IWireframeObjectManager>();
+        _typeManager = Locator.GetRequiredService<TypeManager>();
+        _pluginManager = Locator.GetRequiredService<IPluginManager>();
+        _projectState = Locator.GetRequiredService<IProjectState>();
     }
 
     // Normally plugins will initialize through the PluginManager. This needs to happen earlier (see where it's called for info)
@@ -129,7 +138,12 @@ public partial class PropertyGridManager
             _guiCommands,
             _objectFinder,
             _setVariableLogic);
-        mPropertyGridDisplayer = new ElementSaveDisplayer(new SubtextLogic());
+        mPropertyGridDisplayer = new ElementSaveDisplayer(
+            new SubtextLogic(),
+            _typeManager,
+            _selectedState,
+            _undoManager,
+            _pluginManager);
 
         mainControl = new Gum.MainPropertyGrid();
 
@@ -406,22 +420,40 @@ public partial class PropertyGridManager
                         {
                             foreach (MultiSelectInstanceMember member in gridCategory.Members)
                             {
-                                member.CustomSetPropertyEvent += (sender, args) =>
-                                {
-                                    //do just one undo:
-                                    _undoManager.RecordUndo();
+                                IDisposable? undoLock = null;
 
-                                    // and loop through all instances and refrehs:
+                                member.BeforeMultiSet += (args) =>
+                                {
+                                    // Only lock for Full commits to avoid locking during intermediate changes (like dragging sliders)
+                                    if (args.CommitType == SetPropertyCommitType.Full)
+                                    {
+                                        undoLock = _undoManager.RequestLock();
+                                    }
+                                };
+
+                                member.AfterMultiSet += (args) =>
+                                {
+                                    // Dispose lock if it was created
+                                    if (undoLock != null)
+                                    {
+                                        undoLock.Dispose();
+                                        undoLock = null;
+                                    }
+
+                                    // Record undo after all values have been set
+                                    if (args.CommitType == SetPropertyCommitType.Full)
+                                    {
+                                        _undoManager.RecordUndo();
+                                    }
+
+                                    // Loop through all instances and refresh
                                     foreach (var item in member.InstanceMembers)
                                     {
                                         if (item is StateReferencingInstanceMember srim)
                                         {
                                             srim.NotifyVariableLogic((object)srim.InstanceSave ?? srim.ElementSave, args.CommitType);
-
                                         }
-                                        //RefreshInResponseToVariableChange()
                                     }
-                                    //StateReferencingInstanceMember.NotifyVariableLogic(owner, )
                                 };
                             }
                         }
@@ -468,7 +500,7 @@ public partial class PropertyGridManager
     {
         foreach(var category in categories)
         {
-            category.Members.RemoveAll(item => item.DisplayName == "Name" || item.DisplayName == "Base Type");
+            category.Members.RemoveAll(item => item.DisplayName == "Name" );
         }
     }
 
@@ -560,7 +592,7 @@ public partial class PropertyGridManager
 
         if(asComponent != null)
         {
-            var behaviors = ProjectState.Self.GumProjectSave.Behaviors;
+            var behaviors = _projectState.GumProjectSave.Behaviors;
             var behaviorReferences = asComponent.Behaviors;
 
             string message = null;
@@ -723,7 +755,7 @@ public partial class PropertyGridManager
 
                     var shouldShowLocalizationUi = (member.CustomOptions?.Count > 0) == false &&
                         baseVariable?.Name == "Text" &&
-                        _localizationManager.HasDatabase;
+                        _localizationService.HasDatabase;
 
                     // See StandardElementsManager for Text on explanation why this is commented out.
                     //if(shouldShowLocalizationUi)
@@ -742,7 +774,7 @@ public partial class PropertyGridManager
                         // give it options!
                         member.PreferredDisplayer = typeof(WpfDataUi.Controls.ComboBoxDisplay);
                         member.PropertiesToSetOnDisplayer[nameof(WpfDataUi.Controls.ComboBoxDisplay.IsEditable)] = true;
-                        member.CustomOptions = _localizationManager.Keys.OrderBy(item => item).ToArray();
+                        member.CustomOptions = _localizationService.Keys.OrderBy(item => item).ToArray();
                     }
                     else if(baseVariable?.Name == "Text")
                     {

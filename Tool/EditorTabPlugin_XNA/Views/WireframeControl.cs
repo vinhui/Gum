@@ -31,11 +31,11 @@ namespace Gum.Plugins.InternalPlugins.EditorTab.Views;
 public class WireframeControl : GraphicsDeviceControl
 {
     #region Fields
-    
-    private HotkeyManager _hotkeyManager;
 
+    private IHotkeyManager _hotkeyManager;
+    private IProjectManager _projectManager;
     private SelectionManager _selectionManager;
-    private DragDropManager _dragDropManager;
+    private IDragDropManager _dragDropManager;
     LineRectangle mCanvasBounds;
 
     public Color ScreenBoundsColor = Color.LightBlue;
@@ -101,7 +101,7 @@ public class WireframeControl : GraphicsDeviceControl
 
     void HandleKeyDown(object? sender, KeyEventArgs e)
     {
-        _hotkeyManager.HandleKeyDownWireframe(e);
+        _hotkeyManager.HandleEditorKeyDown(e);
         _cameraController.HandleKeyPress(e);
     }
 
@@ -131,14 +131,16 @@ public class WireframeControl : GraphicsDeviceControl
 
     public void Initialize(
         Panel wireframeParentPanel,
-        HotkeyManager hotkeyManager,
+        IHotkeyManager hotkeyManager,
         SelectionManager selectionManager,
-        DragDropManager dragDropManager,
-        EditorViewModel editorViewModel)
+        IDragDropManager dragDropManager,
+        EditorViewModel editorViewModel,
+        IProjectManager projectManager)
     {
         _selectionManager = selectionManager;
         _dragDropManager = dragDropManager;
         _hotkeyManager = hotkeyManager;
+        _projectManager = projectManager;
         try
         {
             LoaderManager.Self.ContentLoader = new ContentLoader();
@@ -210,7 +212,12 @@ public class WireframeControl : GraphicsDeviceControl
     {
         ElementSaveExtensions.RegisterGueInstantiation(
             "Text",
-            () => new TextRuntime(systemManagers: this.SystemManagers));
+            () =>
+            {
+                // Set this to false to make Text instantiation faster - we always set defaults explicitly
+                TextRuntime.AssignFontInConstructor = false;
+                return new TextRuntime(systemManagers: this.SystemManagers);
+            });
 
         ElementSaveExtensions.RegisterGueInstantiation(
             "Sprite",
@@ -313,7 +320,7 @@ public class WireframeControl : GraphicsDeviceControl
     public void UpdateCanvasBoundsToProject()
     {
 
-        var gumProject = ProjectManager.Self.GumProjectSave;
+        var gumProject = _projectManager.GumProjectSave;
         if (mCanvasBounds != null && gumProject != null)
         {
             mCanvasBounds.Width = GraphicalUiElement.CanvasWidth;

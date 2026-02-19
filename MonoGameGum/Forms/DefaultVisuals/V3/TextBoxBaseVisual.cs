@@ -147,6 +147,7 @@ public abstract class TextBoxBaseVisual : InteractiveGue
 
     public TextBoxBaseVisual(bool fullInstantiation = true, bool tryCreateFormsObject = true) : base(new InvisibleRenderable())
     {
+        this.HasEvents = true;
         States = new TextBoxCategoryStates();
         Width = 256;
         Height = 24;
@@ -173,6 +174,7 @@ public abstract class TextBoxBaseVisual : InteractiveGue
         ClipContainer.Name = "ClipContiner";
         ClipContainer.Dock(Gum.Wireframe.Dock.Fill);
         ClipContainer.ClipsChildren = true;
+        ClipContainer.HasEvents = false;
         this.AddChild(ClipContainer);
 
         SelectionInstance = new NineSliceRuntime();

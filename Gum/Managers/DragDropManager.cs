@@ -27,6 +27,7 @@ using System.Windows.Forms;
 using System.Windows.Navigation;
 using Gum.Extensions;
 using ToolsUtilities;
+using Gum.Plugins.InternalPlugins.VariableGrid;
 
 namespace Gum.Managers;
 
@@ -42,13 +43,11 @@ public interface ITreeNode
     void Expand();
 }
 
-public class DragDropManager
+public class DragDropManager : IDragDropManager
 {
     #region Fields
 
-    static DragDropManager mSelf;
-
-    private readonly CircularReferenceManager _circularReferenceManager;
+    private readonly ICircularReferenceManager _circularReferenceManager;
     private readonly ISelectedState _selectedState;
     private readonly IElementCommands _elementCommands;
     private readonly IRenameLogic _renameLogic;
@@ -56,12 +55,14 @@ public class DragDropManager
     private readonly IDialogService _dialogService;
     private readonly IGuiCommands _guiCommands;
     private readonly IFileCommands _fileCommands;
-    private readonly SetVariableLogic _setVariableLogic;
-    private readonly CopyPasteLogic _copyPasteLogic;
-    private readonly ImportLogic _importLogic;
-    private readonly WireframeObjectManager _wireframeObjectManager;
-    private readonly PluginManager _pluginManager;
-    private readonly ReorderLogic _reorderLogic;
+    private readonly ISetVariableLogic _setVariableLogic;
+    private readonly ICopyPasteLogic _copyPasteLogic;
+    private readonly IImportLogic _importLogic;
+    private readonly IWireframeObjectManager _wireframeObjectManager;
+    private readonly IPluginManager _pluginManager;
+    private readonly IReorderLogic _reorderLogic;
+    private readonly IProjectManager _projectManager;
+    private readonly IProjectState _projectState;
 
     #endregion
 
@@ -77,7 +78,7 @@ public class DragDropManager
 
     #region Constructor
 
-    public DragDropManager(CircularReferenceManager circularReferenceManager,
+    public DragDropManager(ICircularReferenceManager circularReferenceManager,
         ISelectedState selectedState,
         IElementCommands elementCommands,
         IRenameLogic renameLogic,
@@ -85,12 +86,14 @@ public class DragDropManager
         IDialogService dialogService,
         IGuiCommands guiCommands,
         IFileCommands fileCommands,
-        SetVariableLogic setVariableLogic, 
-        CopyPasteLogic copyPasteLogic,
-        ImportLogic importLogic,
-        WireframeObjectManager wireframeObjectManager,
-        PluginManager pluginManager,
-        ReorderLogic reorderLogic)
+        ISetVariableLogic setVariableLogic,
+        ICopyPasteLogic copyPasteLogic,
+        IImportLogic importLogic,
+        IWireframeObjectManager wireframeObjectManager,
+        IPluginManager pluginManager,
+        IReorderLogic reorderLogic,
+        IProjectManager projectManager,
+        IProjectState projectState)
     {
         _circularReferenceManager = circularReferenceManager;
         _selectedState = selectedState;
@@ -106,17 +109,13 @@ public class DragDropManager
         _wireframeObjectManager = wireframeObjectManager;
         _pluginManager = pluginManager;
         _reorderLogic = reorderLogic;
+        _projectManager = projectManager;
+        _projectState = projectState;
     }
 
     #endregion
 
     #region Drag+drop File (from windows explorer)
-
-
-
-
-
-
 
     public IEnumerable<string> ValidTextureExtensions
     {
@@ -220,7 +219,7 @@ public class DragDropManager
 
             if(fullFolderPath != fullElementFilePath)
             {
-                var projectFolder = FileManager.GetDirectory(ProjectManager.Self.GumProjectSave.FullFileName);
+                var projectFolder = FileManager.GetDirectory(_projectManager.GumProjectSave.FullFileName);
 
                 string nodeRelativeToProject = FileManager.MakeRelative(fullFolderPath.FullPath, projectFolder + draggedAsElementSave.Subfolder + "/", preserveCase:true)
                     .Replace("\\", "/");
@@ -305,7 +304,7 @@ public class DragDropManager
             }
 #endif
 
-            string name = GetUniqueNameForNewInstance(draggedAsElementSave, target);
+            string name = _elementCommands.GetUniqueNameForNewInstance(draggedAsElementSave, target);
 
             // First we want to re-select the target so that it is highlighted in the tree view and not
             // the object we dragged off.  This is so that plugins can properly use the SelectedElement.
@@ -360,21 +359,6 @@ public class DragDropManager
         }
 
         return errorMessage;
-    }
-
-    private string GetUniqueNameForNewInstance(ElementSave elementSaveForNewInstance, ElementSave element)
-    {
-#if DEBUG
-        if (elementSaveForNewInstance == null)
-        {
-            throw new ArgumentNullException("elementSave");
-        }
-#endif
-        // remove the path - we dont want folders to be part of the name
-        string name = FileManager.RemovePath( elementSaveForNewInstance.Name ) + "Instance";
-        IEnumerable<string> existingNames = element.Instances.Select(i => i.Name);
-
-        return StringFunctions.MakeStringUnique(name, existingNames);
     }
 
 
@@ -634,7 +618,7 @@ public class DragDropManager
         }
     }
 
-    internal void HandleKeyPress(KeyPressEventArgs e)
+    public void HandleKeyPress(KeyPressEventArgs e)
     {
         int m = 3;
     }
@@ -643,7 +627,7 @@ public class DragDropManager
 
     #region General Functions
 
-    internal bool ValidateNodeSorting(IEnumerable<ITreeNode> draggedNodes, ITreeNode targetNode, int index)
+    public bool ValidateNodeSorting(IEnumerable<ITreeNode> draggedNodes, ITreeNode targetNode, int index)
     {
         if (targetNode == null) return false;
 
@@ -753,9 +737,18 @@ public class DragDropManager
 
     public void OnNodeSortingDropped(IEnumerable<ITreeNode> draggedNodes, ITreeNode targetNode, int index)
     {
-        IEnumerable<object> tags = draggedNodes
+        // Sort InstanceSaves by descending index in their parent container so that,
+        // as each item is inserted at the target position, the final relative order
+        // matches the original order. Non-InstanceSave objects sort last.
+        var tags = draggedNodes
             .Where(n => n.Tag != null)
-            .Select(n => n.Tag);
+            .Select(n => n.Tag)
+            .OrderByDescending(tag => tag is InstanceSave instance
+                ? instance.ParentContainer?.Instances.IndexOf(instance) ?? int.MinValue
+                : int.MinValue)
+            .ToList();
+
+        using var undoLock = _undoManager.RequestLock();
 
         foreach (object draggedObject in tags)
         {
@@ -763,7 +756,7 @@ public class DragDropManager
         }
     }
 
-    internal void OnFilesDroppedInTreeView(string[] files)
+    public void OnFilesDroppedInTreeView(string[] files)
     {
         var targetTreeNode = _pluginManager.GetTreeNodeOver();
 
@@ -804,7 +797,7 @@ public class DragDropManager
 
     public void OnNodeObjectDroppedInWireframe(object draggedObject)
     {
-        ElementSave draggedAsElementSave = draggedObject as ElementSave;                    
+        ElementSave? draggedAsElementSave = draggedObject as ElementSave;                    
         ElementSave? target = _wireframeObjectManager.ElementShowing;
 
         // Depending on how fast the user clicks the UI may think they dragged an instance rather than 
@@ -866,8 +859,8 @@ public class DragDropManager
         float containerLeft = 0;
         float containerTop = 0;
 
-        float containerWidth = ProjectState.Self.GumProjectSave.DefaultCanvasWidth;
-        float containerHeight = ProjectState.Self.GumProjectSave.DefaultCanvasHeight;
+        float containerWidth = _projectState.GumProjectSave.DefaultCanvasWidth;
+        float containerHeight = _projectState.GumProjectSave.DefaultCanvasHeight;
 
         if (component != null)
         {

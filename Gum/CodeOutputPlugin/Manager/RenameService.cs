@@ -12,6 +12,7 @@ using ToolsUtilities;
 using System.IO;
 using Gum;
 using Gum.Commands;
+using Gum.ToolStates;
 
 namespace CodeOutputPlugin.Manager;
 
@@ -27,9 +28,10 @@ internal class RenameService
         CodeGenerator codeGenerator,
         CustomCodeGenerator customCodeGenerator,
         CodeGenerationNameVerifier nameVerifier,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        IProjectState projectState)
     {
-        _codeGenerationFileLocationsService = new CodeGenerationFileLocationsService(codeGenerator, nameVerifier);
+        _codeGenerationFileLocationsService = new CodeGenerationFileLocationsService(codeGenerator, nameVerifier, projectState);
         _codeGenerationService = codeGenerationService;
         _codeGenerator = codeGenerator;
         _customCodeGenerator = customCodeGenerator;
@@ -77,7 +79,9 @@ internal class RenameService
             bool shouldMove = true;
             if (newCustomFileName?.Exists() == true)
             {
-                var message = $"Would you like to rename the custom code file to:\n{newCustomFileName.FullPath}\nThis would delete the existing file that is already there";
+                var message = $"Would you like to rename the custom code file to:\n" +
+                    $"{newCustomFileName.FullPath}\n" +
+                    $"This would delete the existing file that is already there";
                 shouldMove = _dialogService.ShowYesNoMessage(message, "Overwrite?");
 
                 if (shouldMove)
@@ -196,9 +200,19 @@ internal class RenameService
         ///
         var endOfLine = contents.IndexOf("\n", startOfLine + 1);
 
+        var oldClassHeader = contents.Substring(startOfLine, endOfLine - startOfLine);
+        string suffix = string.Empty;
+
+        if(oldClassHeader.Contains(":"))
+        {
+            var colonIndex = oldClassHeader.IndexOf(":");
+            suffix = " " + oldClassHeader.Substring(colonIndex).Trim();
+        }
+
         contents = contents.Remove(startOfLine, endOfLine - startOfLine);
 
-        var newHeader = _customCodeGenerator.GetClassHeader(element, codeOutputProjectSettings)
+
+        var newHeader = _customCodeGenerator.GetClassHeader(element, codeOutputProjectSettings) + suffix
             // don't append \n - it's already there from what was removed earlier
             //+ "\n"
             ;

@@ -192,10 +192,10 @@ public class TextRuntime : InteractiveGue
     }
 #endif
 
+#if RAYLIB || XNALIKE
     /// <summary>
     /// A multiplier used when rendering the text. The default value is 1.0.
     /// </summary>
-#if RAYLIB || XNALIKE
     /// <remarks>
     /// Setting this value to a value other than 1 scales the text accordingly. This is
     /// a scalue value applied to the existing font, so a value larger than 1 can result
@@ -204,6 +204,10 @@ public class TextRuntime : InteractiveGue
     /// Since this value does not affect the underlying Font, it can be changed without
     /// requiring a dedicated font asset.
     /// </remarks>
+#else
+    /// <summary>
+    /// A multiplier used when rendering the text. The default value is 1.0.
+    /// </summary>
 #endif
     public float FontScale
     {
@@ -409,6 +413,14 @@ public class TextRuntime : InteractiveGue
     public static string DefaultFont = "Arial";
     public static int DefaultFontSize = 18;
 
+    /// <summary>
+    /// Indicates whether the font should be assigned during object construction.
+    /// </summary>
+    /// <remarks>Set this field to <see langword="true"/> to assign the font in the constructor, or to <see
+    /// langword="false"/> to defer font assignment until later in the object's lifecycle. This can be set to false
+    /// if TextRuntime instances are always given a custom font, so this can prevent unnecessary font loading/assignment.</remarks>
+    public static bool AssignFontInConstructor = true;
+
     public float DefaultWidth = 0;
     public float DefaultHeight = 0;
 
@@ -421,6 +433,7 @@ public class TextRuntime : InteractiveGue
     {
         if(fullInstantiation)
         {
+            this.SuspendLayout();
             var textRenderable = new Text(systemManagers ?? SystemManagers.Default);
             textRenderable.RenderBoundary = false;
             mContainedText = textRenderable;
@@ -431,11 +444,15 @@ public class TextRuntime : InteractiveGue
             WidthUnits = DefaultWidthUnits;
             Height = DefaultHeight;
             HeightUnits = DefaultHeightUnits;
-            this.FontSize = DefaultFontSize;
-            this.Font = DefaultFont;
+            if(AssignFontInConstructor)
+            {
+                this.FontSize = DefaultFontSize;
+                this.Font = DefaultFont;
+            }
             HasEvents = false;
 
             textRenderable.RawText = "Hello World";
+            this.ResumeLayout();
         }
     }
 

@@ -23,25 +23,29 @@ using System.Threading.Tasks;
 using ToolsUtilitiesStandard.Helpers;
 using System.Net;
 using System.IO;
-using MonoGameGum.Localization;
+using Gum.Localization;
 using System.Security.Policy;
 using Gum.Managers;
 using Microsoft.Xna.Framework.Graphics;
 using Gum.Converters;
 
+#if !FRB
+using MonoGameGum.GueDeriving;
+#endif
+
 #if GUM
 using Gum.Services;
-
-#endif
-
-
-
-
-
-#if GUM
 using Gum.ToolStates;
 #endif
+
+
+
+#if RAYLIB
+namespace RaylibGum.Renderables;
+#else
 namespace Gum.Wireframe;
+#endif
+
 
 public class CustomSetPropertyOnRenderable
 {
@@ -142,9 +146,9 @@ public class CustomSetPropertyOnRenderable
             }
 
         }
-        else if (renderableIpso is Sprite)
+        else if (renderableIpso is Sprite renderableSprite)
         {
-            handled = TrySetPropertyOnSprite(renderableIpso, graphicalUiElement, propertyName, value);
+            handled = TrySetPropertyOnSprite(renderableSprite, graphicalUiElement, propertyName, value);
         }
         else if (renderableIpso is NineSlice)
         {
@@ -362,10 +366,9 @@ public class CustomSetPropertyOnRenderable
         }
     }
 
-    private static bool TrySetPropertyOnSprite(IRenderableIpso renderableIpso, GraphicalUiElement graphicalUiElement, string propertyName, object value)
+    private static bool TrySetPropertyOnSprite(Sprite sprite, GraphicalUiElement graphicalUiElement, string propertyName, object value)
     {
         bool handled = false;
-        var sprite = renderableIpso as Sprite;
 
         if (propertyName == "SourceFile")
         {
@@ -433,7 +436,29 @@ public class CustomSetPropertyOnRenderable
             graphicalUiElement.UpdateLayout();
             handled = true;
         }
-
+#if !FRB
+        else if(propertyName == nameof(SpriteRuntime.RenderTargetTextureSource))
+        {
+            var runtime = graphicalUiElement as SpriteRuntime;
+            if(runtime != null)
+            {
+                if(value == null)
+                {
+                    runtime.RenderTargetTextureSource = null;
+                }
+                else if(value is IRenderableIpso renderableIpso)
+                {
+                    runtime.RenderTargetTextureSource = renderableIpso;
+                }
+                else if(value is string asString)
+                {
+                    runtime.RenderTargetTextureSource = 
+                        (graphicalUiElement.GetTopParent() as GraphicalUiElement)?.GetChildByNameRecursively(asString);
+                }
+                handled = true;
+            }
+        }
+#endif
         return handled;
     }
 
@@ -1078,6 +1103,7 @@ public class CustomSetPropertyOnRenderable
                     // user could have typed anything in there, so who knows if this will succeed. Therefore, try/catch:
                     try
                     {
+                        var projectState = Locator.GetRequiredService<IProjectState>();
                         BmfcSave.CreateBitmapFontFilesIfNecessary(
                             fontSizeStack.Peek(),
                             fontNameStack.Peek(),
@@ -1085,9 +1111,9 @@ public class CustomSetPropertyOnRenderable
                             useFontSmoothingStack.Peek(),
                             isItalicStack.Peek(),
                             isBoldStack.Peek(),
-                            GumState.Self.ProjectState.GumProjectSave?.FontRanges,
-                            GumState.Self.ProjectState.GumProjectSave?.FontSpacingHorizontal ?? 1,
-                            GumState.Self.ProjectState.GumProjectSave?.FontSpacingVertical ?? 1
+                            projectState.GumProjectSave?.FontRanges,
+                            projectState.GumProjectSave?.FontSpacingHorizontal ?? 1,
+                            projectState.GumProjectSave?.FontSpacingVertical ?? 1
 
                             );
                     }

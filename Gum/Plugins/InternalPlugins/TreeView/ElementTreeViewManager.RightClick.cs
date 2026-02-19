@@ -18,6 +18,7 @@ using Gum.Dialogs;
 using Gum.Services;
 using Gum.Services.Dialogs;
 using Gum.Plugins.ImportPlugin.ViewModel;
+using Gum.Plugins.InternalPlugins.VariableGrid;
 
 namespace Gum.Managers;
 
@@ -34,7 +35,6 @@ public partial class ElementTreeViewManager
     ToolStripMenuItem mImportComponent;
     ToolStripMenuItem mAddLinkedComponent;
 
-    ToolStripMenuItem mAddInstance;
     ToolStripMenuItem mAddParentInstance;
     ToolStripMenuItem mSaveObject;
     ToolStripMenuItem mGoToDefinition;
@@ -68,14 +68,10 @@ public partial class ElementTreeViewManager
         mAddLinkedComponent.Text = "Add Linked Component";
         mAddLinkedComponent.Click += HandleAddLinkedComponentClick;
 
-        mAddInstance = new ToolStripMenuItem();
-        mAddInstance.Text = "Add Instance";
-        mAddInstance.Click += (_, _) => _dialogService.Show<AddInstanceDialogViewModel>();
-
         mAddParentInstance = new ToolStripMenuItem();
         mAddParentInstance.Text = "Add Parent Instance";
         mAddParentInstance.Click +=
-            (_, _) => _dialogService.Show<AddInstanceDialogViewModel>(x => x.ParentInstance = true);
+            (_, _) => _dialogService.Show<AddInstanceDialogViewModel>(x => x.IsAddingAsParentToSelectedInstance = true);
 
         mSaveObject = new ToolStripMenuItem();
         mSaveObject.Text = "Force Save Object";
@@ -254,8 +250,8 @@ public partial class ElementTreeViewManager
                 {
                     mMenuStrip.Items.Add("-");
 
-                    mAddInstance.Text = $"Add child object to '{_selectedState.SelectedInstance.Name}'";
-                    mMenuStrip.Items.Add(mAddInstance);
+                    AddCreateInstanceMenuItems($"Add child object to '{_selectedState.SelectedInstance.Name}'");
+                    
                     mAddParentInstance.Text = $"Add parent object to '{_selectedState.SelectedInstance.Name}'";
                     mMenuStrip.Items.Add(mAddParentInstance);
 
@@ -289,8 +285,8 @@ public partial class ElementTreeViewManager
 
                 mMenuStrip.Items.Add("-");
 
-                mAddInstance.Text = "Add object to " + _selectedState.SelectedElement!.Name;
-                mMenuStrip.Items.Add(mAddInstance);
+                AddCreateInstanceMenuItems("Add object to " + _selectedState.SelectedElement!.Name);
+
                 mMenuStrip.Items.Add(mSaveObject);
                 if (_selectedState.SelectedScreen != null)
                 {
@@ -311,6 +307,16 @@ public partial class ElementTreeViewManager
 
                 mDeleteObject.Text = "Delete " + _selectedState.SelectedElement.ToString();
                 mMenuStrip.Items.Add(mDeleteObject);
+
+                // Add favorite toggle for components only
+                if (_selectedState.SelectedComponent != null)
+                {
+                    mMenuStrip.Items.Add("-");
+
+                    var isFavorite = _favoriteComponentManager.IsFavorite(_selectedState.SelectedComponent);
+                    var favoriteText = isFavorite ? "Remove from Favorites" : "Add to Favorites";
+                    mMenuStrip.Items.Add(favoriteText, null, HandleToggleFavorite);
+                }
 
             }
             #endregion
@@ -402,6 +408,76 @@ public partial class ElementTreeViewManager
         }
     }
 
+    private void AddCreateInstanceMenuItems(string itemText)
+    {
+        var parentMenuItem = new ToolStripMenuItem(itemText);
+        mMenuStrip.Items.Add(parentMenuItem);
+
+        // Add favorited components first
+        var favoritedComponents = _favoriteComponentManager.GetFilteredFavoritedComponentsFor(
+            _selectedState.SelectedElement,
+            _circularReferenceManager);
+        if (favoritedComponents.Count > 0)
+        {
+            foreach (var component in favoritedComponents)
+            {
+                var menuItem = new ToolStripMenuItem(component.Name);
+                parentMenuItem.DropDownItems.Add(menuItem);
+
+                var componentName = component.Name;
+                menuItem.Click += (_, _) =>
+                {
+                    var selectedElement = _selectedState.SelectedElement;
+                    if (selectedElement != null)
+                    {
+                        var newInstanceElementType = ObjectFinder.Self.GetElementSave(componentName)!;
+                        var name = _elementCommands.GetUniqueNameForNewInstance(newInstanceElementType, selectedElement);
+
+                        var viewModel = new AddInstanceDialogViewModel(
+                            _selectedState,
+                            _nameVerifier,
+                            _elementCommands,
+                            _setVariableLogic);
+                        viewModel.TypeToCreate = componentName;
+                        viewModel.Value = name;
+                        viewModel.OnAffirmative();
+                    }
+                };
+            }
+
+            // Add separator after favorited components
+            parentMenuItem.DropDownItems.Add(new ToolStripSeparator());
+        }
+
+        // Add child menu items for each type
+        var types = new[] { "Sprite", "Text", "NineSlice", "ColoredRectangle", "Container" };
+
+        foreach (var type in types)
+        {
+            var menuItem = new ToolStripMenuItem(type);
+            parentMenuItem.DropDownItems.Add(menuItem);
+
+            menuItem.Click += (_, _) =>
+            {
+                var selectedElement = _selectedState.SelectedElement;
+                if (selectedElement != null)
+                {
+                    var newInstanceElementType = ObjectFinder.Self.GetElementSave(type)!;
+                    var name = _elementCommands.GetUniqueNameForNewInstance(newInstanceElementType, selectedElement);
+
+                    var viewModel = new AddInstanceDialogViewModel(
+                        _selectedState,
+                        _nameVerifier,
+                        _elementCommands,
+                        _setVariableLogic);
+                    viewModel.TypeToCreate = type;
+                    viewModel.Value = name;
+                    viewModel.OnAffirmative();
+                }
+            };
+        }
+    }
+
     private void AddCopyMenuItems()
     {
         mMenuStrip.Items.Add("Copy", null, HandleCopy);
@@ -465,6 +541,22 @@ public partial class ElementTreeViewManager
         _copyPasteLogic.OnPaste(CopyType.InstanceOrElement, TopOrRecursive.Top);
     }
 
+    private void HandleToggleFavorite(object? sender, EventArgs e)
+    {
+        var component = _selectedState.SelectedComponent;
+        if (component == null) return;
+
+        var isFavorite = _favoriteComponentManager.IsFavorite(component);
+        if (isFavorite)
+        {
+            _favoriteComponentManager.RemoveFromFavorites(component);
+        }
+        else
+        {
+            _favoriteComponentManager.AddToFavorites(component);
+        }
+    }
+
     private void HandleViewReferences(object? sender, EventArgs e)
     {
         _dialogService.Show<DisplayReferencesDialog>(vm => vm.ElementSave = _selectedState.SelectedElement);
@@ -509,7 +601,7 @@ public partial class ElementTreeViewManager
 
     private bool GuardProjectSaved(string? reason = null)
     {
-        if (ObjectFinder.Self.GumProjectSave == null || string.IsNullOrEmpty(ProjectManager.Self.GumProjectSave.FullFileName))
+        if (ObjectFinder.Self.GumProjectSave == null || string.IsNullOrEmpty(Locator.GetRequiredService<IProjectManager>().GumProjectSave.FullFileName))
         {
             _dialogService.ShowMessage("You must first save the project");
             return false;
@@ -521,7 +613,7 @@ public partial class ElementTreeViewManager
     private void HandleAddLinkedComponentClick(object? sender, EventArgs e)
     {
         ////////////////Early Out/////////////////////////
-        if (string.IsNullOrEmpty(ProjectManager.Self.GumProjectSave?.FullFileName))
+        if (string.IsNullOrEmpty(Locator.GetRequiredService<IProjectManager>().GumProjectSave?.FullFileName))
         {
             _dialogService.ShowMessage("You must first save the project before adding a new component");
             return;
@@ -561,12 +653,12 @@ public partial class ElementTreeViewManager
             gumProject.ComponentReferences.Sort();
 
 
-            var components = ProjectManager.Self.GumProjectSave.Components;
+            var components = Locator.GetRequiredService<IProjectManager>().GumProjectSave.Components;
             components.Add(componentSave);
             components.Sort((first, second) => first.Name.CompareTo(second.Name));
 
             componentSave.InitializeDefaultAndComponentVariables();
-            StandardElementsManagerGumTool.Self.FixCustomTypeConverters(componentSave);
+            _standardElementsManagerGumTool.FixCustomTypeConverters(componentSave);
 
             lastImportedComponent = componentSave;
         }

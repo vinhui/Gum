@@ -34,11 +34,11 @@ public class MainStatePlugin : InternalPlugin
 
     PluginTab newPluginTab;
     private readonly StateTreeViewRightClickService _stateTreeViewRightClickService;
-    private readonly HotkeyManager _hotkeyManager;
+    private readonly IHotkeyManager _hotkeyManager;
     private readonly ISelectedState _selectedState;
     private readonly ObjectFinder _objectFinder;
     private readonly IVariableInCategoryPropagationLogic _variableInCategoryPropagationLogic;
-    private readonly CopyPasteLogic _copyPasteLogic;
+    private readonly ICopyPasteLogic _copyPasteLogic;
 
     #endregion
 
@@ -58,10 +58,10 @@ public class MainStatePlugin : InternalPlugin
             dialogService, 
             _guiCommands, 
             _fileCommands);
-        _hotkeyManager = Locator.GetRequiredService<HotkeyManager>();
+        _hotkeyManager = Locator.GetRequiredService<IHotkeyManager>();
         _objectFinder = ObjectFinder.Self;
         _variableInCategoryPropagationLogic = Locator.GetRequiredService<IVariableInCategoryPropagationLogic>();
-        _copyPasteLogic = Locator.GetRequiredService<CopyPasteLogic>();
+        _copyPasteLogic = Locator.GetRequiredService<ICopyPasteLogic>();
 
         stateTreeViewModel = new StateTreeViewModel(_stateTreeViewRightClickService,
             selectedState);

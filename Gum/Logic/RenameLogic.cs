@@ -17,6 +17,7 @@ using Gum.Services;
 using Gum.Services.Dialogs;
 using ToolsUtilities;
 using DialogResult = System.Windows.Forms.DialogResult;
+using Gum.Plugins.InternalPlugins.VariableGrid;
 
 namespace Gum.Logic;
 
@@ -73,14 +74,22 @@ public class RenameLogic : IRenameLogic
     private readonly IDialogService _dialogService;
     private readonly IGuiCommands _guiCommands;
     private readonly IFileCommands _fileCommands;
-    private readonly DeleteLogic _deleteLogic;
+    private readonly IDeleteLogic _deleteLogic;
+    private readonly IProjectManager _projectManager;
+    private readonly IProjectState _projectState;
+    private readonly IPluginManager _pluginManager;
+    private readonly IStandardElementsManagerGumTool _standardElementsManagerGumTool;
 
-    public RenameLogic(ISelectedState selectedState, 
-        INameVerifier nameVerifier, 
-        IDialogService dialogService, 
+    public RenameLogic(ISelectedState selectedState,
+        INameVerifier nameVerifier,
+        IDialogService dialogService,
         IGuiCommands guiCommands,
         IFileCommands fileCommands,
-        DeleteLogic deleteLogic)
+        IDeleteLogic deleteLogic,
+        IProjectManager projectManager,
+        IProjectState projectState,
+        IPluginManager pluginManager,
+        IStandardElementsManagerGumTool standardElementsManagerGumTool)
     {
         _selectedState = selectedState;
         _nameVerifier = nameVerifier;
@@ -88,6 +97,10 @@ public class RenameLogic : IRenameLogic
         _guiCommands = guiCommands;
         _fileCommands = fileCommands;
         _deleteLogic = deleteLogic;
+        _projectManager = projectManager;
+        _projectState = projectState;
+        _pluginManager = pluginManager;
+        _standardElementsManagerGumTool = standardElementsManagerGumTool;
     }
 
     #region StateSave
@@ -111,7 +124,7 @@ public class RenameLogic : IRenameLogic
             // because it displays the state name at the top
             _guiCommands.RefreshVariables(force: true);
 
-            PluginManager.Self.StateRename(stateSave, oldName);
+            _pluginManager.StateRename(stateSave, oldName);
 
             _fileCommands.TryAutoSaveCurrentElement();
         }
@@ -200,18 +213,18 @@ public class RenameLogic : IRenameLogic
         // I don't think we need to save the project when renaming a state:
         //_fileCommands.TryAutoSaveProject();
 
-        PluginManager.Self.CategoryRename(category, oldName);
+        _pluginManager.CategoryRename(category, oldName);
 
         _fileCommands.TryAutoSaveCurrentObject();
 
         if (owner is ElementSave ownerAsElementSave)
         {
-            StandardElementsManagerGumTool.Self.FixCustomTypeConverters(ownerAsElementSave);
+            _standardElementsManagerGumTool.FixCustomTypeConverters(ownerAsElementSave);
         }
 
         foreach (var item in elementsWithChangedVariables)
         {
-            StandardElementsManagerGumTool.Self.FixCustomTypeConverters(item);
+            _standardElementsManagerGumTool.FixCustomTypeConverters(item);
 
             _fileCommands.TryAutoSaveElement(item);
         }
@@ -221,7 +234,7 @@ public class RenameLogic : IRenameLogic
     {
         List<VariableChange> toReturn = new List<VariableChange>();
 
-        var project = GumState.Self.ProjectState.GumProjectSave;
+        var project = _projectState.GumProjectSave;
 
         var ownerAsElement = owner as ElementSave;
 
@@ -377,7 +390,7 @@ public class RenameLogic : IRenameLogic
             System.IO.File.Delete(oldXml.FullPath);
         }
 
-        PluginManager.Self.ElementRename(elementSave, oldName);
+        _pluginManager.ElementRename(elementSave, oldName);
 
         _fileCommands.TryAutoSaveProject();
 
@@ -399,7 +412,7 @@ public class RenameLogic : IRenameLogic
 
     private void RenameAllReferencesTo(ElementSave elementSave, InstanceSave instance, string oldName)
     {
-        var project = ProjectManager.Self.GumProjectSave;
+        var project = _projectManager.GumProjectSave;
         // Tell the GumProjectSave to react to the rename.
         // This changes the names of the ElementSave references.
         project.ReactToRenamed(elementSave, instance, oldName);
@@ -410,7 +423,7 @@ public class RenameLogic : IRenameLogic
 
         if (instance == null)
         {
-            foreach (var screen in ProjectState.Self.GumProjectSave.Screens)
+            foreach (var screen in _projectState.GumProjectSave.Screens)
             {
                 bool shouldSave = false;
 
@@ -444,7 +457,7 @@ public class RenameLogic : IRenameLogic
                 }
             }
 
-            foreach (var component in ProjectState.Self.GumProjectSave.Components)
+            foreach (var component in _projectState.GumProjectSave.Components)
             {
                 bool shouldSave = false;
                 if (component.BaseType == oldName)
@@ -499,7 +512,7 @@ public class RenameLogic : IRenameLogic
                 var renamedDefaultChildContainer = false;
                 foreach (var state in _selectedState.SelectedElement.AllStates)
                 {
-                    var variable = state.Variables.FirstOrDefault(item => item.Name == nameof(ComponentSave.DefaultChildContainer));
+                    var variable = state.Variables.FirstOrDefault(item => item.Name == "DefaultChildContainer");
 
                     if (variable?.Value as string != null)
                     {
@@ -616,8 +629,8 @@ public class RenameLogic : IRenameLogic
     // public void HandleRename(ElementSave containerElement, EventSave eventSave, string oldName)
     // {
     //     List<ElementSave> elements = new List<ElementSave>();
-    //     elements.AddRange(ProjectManager.Self.GumProjectSave.Screens);
-    //     elements.AddRange(ProjectManager.Self.GumProjectSave.Components);
+    //     elements.AddRange(_projectManager.GumProjectSave.Screens);
+    //     elements.AddRange(_projectManager.GumProjectSave.Components);
     //
     //     foreach (var possibleElement in elements)
     //     {
@@ -649,7 +662,7 @@ public class RenameLogic : IRenameLogic
         List<VariableChange> variableChanges = new List<VariableChange>();
         List<VariableReferenceChange> variableReferenceChanges = new List<VariableReferenceChange>();
 
-        var project = GumState.Self.ProjectState.GumProjectSave;
+        var project = _projectState.GumProjectSave;
 
         var changedVariableOwnerElement = owner as ElementSave;
 
@@ -794,6 +807,65 @@ public class RenameLogic : IRenameLogic
             VariableChanges = variableChanges,
             VariableReferenceChanges = variableReferenceChanges
         };
+    }
+
+    public void PropagateVariableRename(ElementSave parent, string variableFullName,
+        string oldStrippedOrExposedName, string newStrippedOrExposedName,
+        HashSet<ElementSave> elementsNeedingSave)
+    {
+        var changes = GetVariableChangesForRenamedVariable(parent, variableFullName, oldStrippedOrExposedName);
+
+        foreach (var change in changes.VariableChanges)
+        {
+            if (change.Container is ElementSave element)
+                elementsNeedingSave.Add(element);
+
+            if (change.Variable.ExposedAsName == oldStrippedOrExposedName)
+            {
+                change.Variable.ExposedAsName = newStrippedOrExposedName;
+            }
+            else if (change.Variable.GetRootName() == oldStrippedOrExposedName)
+            {
+                var prefix = change.Variable.SourceObject != null
+                    ? change.Variable.SourceObject + "."
+                    : string.Empty;
+                change.Variable.Name = prefix + newStrippedOrExposedName;
+            }
+        }
+
+        foreach (var referenceChange in changes.VariableReferenceChanges)
+        {
+            if (referenceChange.Container != null)
+                elementsNeedingSave.Add(referenceChange.Container);
+
+            var variableList = referenceChange.VariableReferenceList;
+            var oldLine = variableList.ValueAsIList[referenceChange.LineIndex]?.ToString();
+            if (oldLine == null) continue;
+
+            var leftAndRight = oldLine.Split('=').Select(item => item.Trim()).ToArray();
+            if (leftAndRight.Length < 2) continue;
+
+            if (referenceChange.ChangedSide is SideOfEquals.Left or SideOfEquals.Both)
+            {
+                if (leftAndRight[0] == oldStrippedOrExposedName)
+                    leftAndRight[0] = newStrippedOrExposedName;
+            }
+
+            if (referenceChange.ChangedSide is SideOfEquals.Right or SideOfEquals.Both)
+            {
+                if (leftAndRight[1] == oldStrippedOrExposedName)
+                {
+                    leftAndRight[1] = newStrippedOrExposedName;
+                }
+                else if (leftAndRight[1].EndsWith("." + oldStrippedOrExposedName))
+                {
+                    var newLength = leftAndRight[1].Length - oldStrippedOrExposedName.Length;
+                    leftAndRight[1] = leftAndRight[1].Substring(0, newLength) + newStrippedOrExposedName;
+                }
+            }
+
+            variableList.ValueAsIList[referenceChange.LineIndex] = $"{leftAndRight[0]}={leftAndRight[1]}";
+        }
     }
 
 
