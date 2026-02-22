@@ -502,6 +502,18 @@ public class ScrollViewer :
         }
     }
 
+    public override void RemoveChild(FrameworkElement child)
+    {
+        if (InnerPanel != null)
+        {
+            this.InnerPanel.Children.Remove(child.Visual);
+        }
+        else
+        {
+            base.RemoveChild(child);
+        }
+    }
+
     public override void AddChild(GraphicalUiElement child)
     {
         if (InnerPanel != null)
@@ -511,6 +523,18 @@ public class ScrollViewer :
         else
         {
             base.AddChild(child);
+        }
+    }
+
+    public override void RemoveChild(GraphicalUiElement child)
+    {
+        if (InnerPanel != null)
+        {
+            this.InnerPanel.Children.Remove(child);
+        }
+        else
+        {
+            base.RemoveChild(child);
         }
     }
 
@@ -798,7 +822,7 @@ public class ScrollViewer :
         }
 
         // Set the values here:
-        SetVerticalSrollBarValuesFromVisuals();
+        SetVerticalScrollBarValuesFromVisuals();
 
         // Record the inner panel height before (possibly) changing the
         // scroll bar height...
@@ -827,10 +851,10 @@ public class ScrollViewer :
         if (didHeightChange)
         {
             // It changed, which can adjust the scroll bar height so let's adjust it again
-            SetVerticalSrollBarValuesFromVisuals();
+            SetVerticalScrollBarValuesFromVisuals();
         }
 
-        void SetVerticalSrollBarValuesFromVisuals()
+        void SetVerticalScrollBarValuesFromVisuals()
         {
             verticalScrollBar.Minimum = 0;
             verticalScrollBar.ViewportSize = clipContainer.GetAbsoluteHeight();

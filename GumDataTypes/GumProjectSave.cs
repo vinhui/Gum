@@ -152,6 +152,8 @@ public class GumProjectSave
         set;
     }
 
+    public List<string> FavoriteComponents { get; set; }
+
     /// <summary>
     /// The folder of the root of the parent project if this Gum project is part of a larger project (like a game project or android app).
     /// This is a relative path like "../../"
@@ -278,6 +280,8 @@ public class GumProjectSave
 
     public GumProjectSave()
     {
+        FavoriteComponents = new List<string>();
+
         ShowOutlines = true;
         ShowCanvasOutline = true;
         ShowRuler = true;
@@ -287,6 +291,7 @@ public class GumProjectSave
         RestrictToUnitValues = true;
 
         Guides = new List<GuideRectangle>();
+        FavoriteComponents = new List<string>();
 
         DefaultCanvasWidth = 800;
         DefaultCanvasHeight = 600;

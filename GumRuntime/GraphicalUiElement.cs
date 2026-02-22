@@ -955,7 +955,7 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
                     float.IsNegativeInfinity(value) ||
                     float.IsNaN(value))
                 {
-                    throw new ArgumentException();
+                    throw new ArgumentException("Invalid Width: " + value);
                 }
 #endif
                 mWidth = value;
@@ -1026,7 +1026,7 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
                     float.IsNegativeInfinity(value) ||
                     float.IsNaN(value))
                 {
-                    throw new ArgumentException();
+                    throw new ArgumentException("Invalid height: " + value);
                 }
 #endif
                 mHeight = value;
@@ -1548,25 +1548,20 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
 #if !FRB
     public List<AnimationRuntime>? Animations { get; set; }
 
-    AnimationRuntime? currentAnimation;
-    double currentAnimationTime;
+    /// <summary>
+    /// Gets the AnimationController that manages animation playback for this element.
+    /// Use this to control animations (play, pause, stop), check playback state, and subscribe to animation events.
+    /// </summary>
+    public AnimationController AnimationController { get; } = new();
 
     /// <summary>
     /// Starts playing the specified AnimationRuntime.
     /// </summary>
     /// <param name="animation">the AnimationRuntime object</param>
-    /// <exception cref="InvalidOperationException"></exception>
+    /// <exception cref="ArgumentNullException">Thrown when animation is null.</exception>
     public void PlayAnimation(AnimationRuntime animation)
     {
-        if (animation != null)
-        {
-            currentAnimation = animation;
-            currentAnimationTime = 0;
-        }
-        else
-        {
-            throw new ArgumentNullException(nameof(animation), "the animation cannot be null");
-        }
+        AnimationController.Play(animation);
     }
 
 
@@ -1575,7 +1570,7 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
     /// </summary>
     public void StopAnimation()
     {
-        currentAnimation = null;
+        AnimationController.Stop();
     }
 #endif
 
@@ -4042,7 +4037,7 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
             if (whatToStackAfter != null)
             {
                 var effectiveParent = this.EffectiveParentGue;
-                switch (effectiveParent.ChildrenLayout)
+                switch (effectiveParent!.ChildrenLayout)
                 {
                     case Gum.Managers.ChildrenLayout.TopToBottomStack:
 
@@ -4078,8 +4073,8 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
             float cellWidth, cellHeight;
             GetCellDimensions(indexInSiblingList, out xIndex, out yIndex, out cellWidth, out cellHeight);
 
-            unitOffsetX += cellWidth * xIndex + Parent.StackSpacing * (xIndex);
-            unitOffsetY += cellHeight * yIndex + Parent.StackSpacing * (yIndex );
+            unitOffsetX += cellWidth * xIndex + Parent!.StackSpacing * (xIndex);
+            unitOffsetY += cellHeight * yIndex + Parent!.StackSpacing * (yIndex );
         }
     }
 
@@ -5235,58 +5230,6 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
         }
     }
 
-    public void SetGueValues(IVariableFinder rvf)
-    {
-
-        this.SuspendLayout();
-
-        this.Width = rvf.GetValue<float>("Width");
-        this.Height = rvf.GetValue<float>("Height");
-
-        this.HeightUnits = rvf.GetValue<DimensionUnitType>("HeightUnits");
-        this.WidthUnits = rvf.GetValue<DimensionUnitType>("WidthUnits");
-
-        this.XOrigin = rvf.GetValue<HorizontalAlignment>("XOrigin");
-        this.YOrigin = rvf.GetValue<VerticalAlignment>("YOrigin");
-
-        this.X = rvf.GetValue<float>("X");
-        this.Y = rvf.GetValue<float>("Y");
-
-        this.XUnits = UnitConverter.ConvertToGeneralUnit(rvf.GetValue<PositionUnitType>("XUnits"));
-        this.YUnits = UnitConverter.ConvertToGeneralUnit(rvf.GetValue<PositionUnitType>("YUnits"));
-
-        this.TextureWidth = rvf.GetValue<int>("TextureWidth");
-        this.TextureHeight = rvf.GetValue<int>("TextureHeight");
-        this.TextureLeft = rvf.GetValue<int>("TextureLeft");
-        this.TextureTop = rvf.GetValue<int>("TextureTop");
-
-        this.TextureWidthScale = rvf.GetValue<float>("TextureWidthScale");
-        this.TextureHeightScale = rvf.GetValue<float>("TextureHeightScale");
-
-        this.Wrap = rvf.GetValue<bool>("Wrap");
-
-        this.TextureAddress = rvf.GetValue<TextureAddress>("TextureAddress");
-
-        this.ChildrenLayout = rvf.GetValue<ChildrenLayout>("ChildrenLayout");
-        this.WrapsChildren = rvf.GetValue<bool>("WrapsChildren");
-        this.ClipsChildren = rvf.GetValue<bool>("ClipsChildren");
-
-        if (this.ElementSave != null)
-        {
-            foreach (var category in ElementSave.Categories)
-            {
-                string valueOnThisState = rvf.GetValue<string>(category.Name + "State");
-
-                if (!string.IsNullOrEmpty(valueOnThisState))
-                {
-                    this.ApplyState(valueOnThisState);
-                }
-            }
-        }
-
-        this.ResumeLayout();
-    }
-
     partial void CustomAddToManagers();
 
     /// <summary>
@@ -5647,6 +5590,89 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
             mManagers = null;
         }
     }
+
+
+    private int GetOrderedIndexForParentVariable(VariableSave item)
+    {
+        var objectName = item.SourceObject;
+        for (int i = 0; i < ElementSave.Instances.Count; i++)
+        {
+            if (objectName == ElementSave.Instances[i].Name)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+
+    public void AddCategory(DataTypes.Variables.StateSaveCategory category)
+    {
+#if FULL_DIAGNOSTICS
+        if (string.IsNullOrEmpty(category.Name))
+        {
+            throw new ArgumentException("The category must have its Name set before being added to this");
+        }
+#endif
+        //mCategories[category.Name] = category;
+        // Why call "Add"? This makes Gum crash if there are duplicate catgories...
+        //mCategories.Add(category.Name, category);
+        mCategories[category.Name] = category;
+    }
+
+    public void AddStates(List<DataTypes.Variables.StateSave> list)
+    {
+        foreach (var state in list)
+        {
+#if FULL_DIAGNOSTICS
+            if (state.Name == null)
+            {
+                throw new ArgumentException("One of the states being added has a null name - be sure to set the name of all states");
+            }
+#endif
+            // Right now this doesn't support inheritance
+            // Need to investigate this....at some point:
+            mStates[state.Name] = state;
+        }
+    }
+
+    // When interpolating between two states,
+    // the code is goign to merge the values from
+    // the two states to create a 3rd set of (merged)
+    // values. Interpolation can happen in complex animations
+    // resulting in lots of merged lists being created. This allocates
+    // tons of memory. Therefore we create a static set of variable lists
+    // to store the merged values. We don't know how deep the stack will go
+    // (animations within animations) so we need to support a dynamically growing
+    // list. The numberOfUsedInterpolationLists stores how many times this is being
+    // called so it knows if it needs to add more lists.
+    static List<List<Gum.DataTypes.Variables.VariableSaveValues>> listOfListsForReducingAllocInInterpolation = new List<List<Gum.DataTypes.Variables.VariableSaveValues>>();
+    int numberOfUsedInterpolationLists = 0;
+
+    public void InterpolateBetween(Gum.DataTypes.Variables.StateSave first, Gum.DataTypes.Variables.StateSave second, float interpolationValue)
+    {
+        if (numberOfUsedInterpolationLists >= listOfListsForReducingAllocInInterpolation.Count)
+        {
+            const int capacity = 20;
+            var newList = new List<DataTypes.Variables.VariableSaveValues>(capacity);
+            listOfListsForReducingAllocInInterpolation.Add(newList);
+        }
+
+        List<Gum.DataTypes.Variables.VariableSaveValues> values = listOfListsForReducingAllocInInterpolation[numberOfUsedInterpolationLists];
+        values.Clear();
+        numberOfUsedInterpolationLists++;
+
+        Gum.DataTypes.Variables.StateSaveExtensionMethods.Merge(first, second, interpolationValue, values);
+
+        this.ApplyState(values);
+        numberOfUsedInterpolationLists--;
+    }
+
+
+    #endregion
+
+    #region Set Values/States
+
 
     // This is made public so that specific implementations can fall back to it if needed:
     public static void SetPropertyThroughReflection(IRenderableIpso mContainedObjectAsIpso, GraphicalUiElement graphicalUiElement, string propertyName, object value)
@@ -6137,19 +6163,6 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
 
     }
 
-    private int GetOrderedIndexForParentVariable(VariableSave item)
-    {
-        var objectName = item.SourceObject;
-        for (int i = 0; i < ElementSave.Instances.Count; i++)
-        {
-            if (objectName == ElementSave.Instances[i].Name)
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     public void ApplyState(List<DataTypes.Variables.VariableSaveValues> variableSaveValues)
     {
         this.SuspendLayout(true);
@@ -6164,75 +6177,66 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
         this.ResumeLayout(true);
     }
 
-    public void AddCategory(DataTypes.Variables.StateSaveCategory category)
-    {
-#if FULL_DIAGNOSTICS
-        if (string.IsNullOrEmpty(category.Name))
-        {
-            throw new ArgumentException("The category must have its Name set before being added to this");
-        }
-#endif
-        //mCategories[category.Name] = category;
-        // Why call "Add"? This makes Gum crash if there are duplicate catgories...
-        //mCategories.Add(category.Name, category);
-        mCategories[category.Name] = category;
-    }
 
-    public void AddStates(List<DataTypes.Variables.StateSave> list)
+    public void SetGueValues(IVariableFinder rvf)
     {
-        foreach (var state in list)
+
+        this.SuspendLayout();
+
+        this.Width = rvf.GetValue<float>("Width");
+        this.Height = rvf.GetValue<float>("Height");
+
+        this.HeightUnits = rvf.GetValue<DimensionUnitType>("HeightUnits");
+        this.WidthUnits = rvf.GetValue<DimensionUnitType>("WidthUnits");
+
+        this.XOrigin = rvf.GetValue<HorizontalAlignment>("XOrigin");
+        this.YOrigin = rvf.GetValue<VerticalAlignment>("YOrigin");
+
+        this.X = rvf.GetValue<float>("X");
+        this.Y = rvf.GetValue<float>("Y");
+
+        this.XUnits = UnitConverter.ConvertToGeneralUnit(rvf.GetValue<PositionUnitType>("XUnits"));
+        this.YUnits = UnitConverter.ConvertToGeneralUnit(rvf.GetValue<PositionUnitType>("YUnits"));
+
+        this.TextureWidth = rvf.GetValue<int>("TextureWidth");
+        this.TextureHeight = rvf.GetValue<int>("TextureHeight");
+        this.TextureLeft = rvf.GetValue<int>("TextureLeft");
+        this.TextureTop = rvf.GetValue<int>("TextureTop");
+
+        this.TextureWidthScale = rvf.GetValue<float>("TextureWidthScale");
+        this.TextureHeightScale = rvf.GetValue<float>("TextureHeightScale");
+
+        this.Wrap = rvf.GetValue<bool>("Wrap");
+
+        this.TextureAddress = rvf.GetValue<TextureAddress>("TextureAddress");
+
+        this.ChildrenLayout = rvf.GetValue<ChildrenLayout>("ChildrenLayout");
+        this.WrapsChildren = rvf.GetValue<bool>("WrapsChildren");
+        this.ClipsChildren = rvf.GetValue<bool>("ClipsChildren");
+
+        if (this.ElementSave != null)
         {
-#if FULL_DIAGNOSTICS
-            if (state.Name == null)
+            foreach (var category in ElementSave.Categories)
             {
-                throw new ArgumentException("One of the states being added has a null name - be sure to set the name of all states");
+                string valueOnThisState = rvf.GetValue<string>(category.Name + "State");
+
+                if (!string.IsNullOrEmpty(valueOnThisState))
+                {
+                    this.ApplyState(valueOnThisState);
+                }
             }
-#endif
-            // Right now this doesn't support inheritance
-            // Need to investigate this....at some point:
-            mStates[state.Name] = state;
-        }
-    }
-
-    // When interpolating between two states,
-    // the code is goign to merge the values from
-    // the two states to create a 3rd set of (merged)
-    // values. Interpolation can happen in complex animations
-    // resulting in lots of merged lists being created. This allocates
-    // tons of memory. Therefore we create a static set of variable lists
-    // to store the merged values. We don't know how deep the stack will go
-    // (animations within animations) so we need to support a dynamically growing
-    // list. The numberOfUsedInterpolationLists stores how many times this is being
-    // called so it knows if it needs to add more lists.
-    static List<List<Gum.DataTypes.Variables.VariableSaveValues>> listOfListsForReducingAllocInInterpolation = new List<List<Gum.DataTypes.Variables.VariableSaveValues>>();
-    int numberOfUsedInterpolationLists = 0;
-
-    public void InterpolateBetween(Gum.DataTypes.Variables.StateSave first, Gum.DataTypes.Variables.StateSave second, float interpolationValue)
-    {
-        if (numberOfUsedInterpolationLists >= listOfListsForReducingAllocInInterpolation.Count)
-        {
-            const int capacity = 20;
-            var newList = new List<DataTypes.Variables.VariableSaveValues>(capacity);
-            listOfListsForReducingAllocInInterpolation.Add(newList);
         }
 
-        List<Gum.DataTypes.Variables.VariableSaveValues> values = listOfListsForReducingAllocInInterpolation[numberOfUsedInterpolationLists];
-        values.Clear();
-        numberOfUsedInterpolationLists++;
-
-        Gum.DataTypes.Variables.StateSaveExtensionMethods.Merge(first, second, interpolationValue, values);
-
-        this.ApplyState(values);
-        numberOfUsedInterpolationLists--;
+        this.ResumeLayout();
     }
-
-
 
     #endregion
 
     #region Get/Add Child/Element
 
     public void AddChild(GraphicalUiElement child) => this.Children.Add(child);
+
+    public void RemoveChild(GraphicalUiElement child) => this.Children.Remove(child);
 
     /// <summary>
     /// Searches recursively for and returns a GraphicalUiElement in this instance by name. Returns null
@@ -6659,15 +6663,7 @@ public partial class GraphicalUiElement : IRenderableIpso, IVisible, INotifyProp
     /// <param name="secondDifference">The time elapsed since the last update, in seconds.</param>
     private void RunAnimation(double secondDifference)
     {
-        if (currentAnimation != null)
-        {
-            currentAnimationTime += secondDifference;
-            currentAnimation.ApplyAtTimeTo(currentAnimationTime, this);
-            if (!currentAnimation.Loops && currentAnimationTime >= currentAnimation.Length)
-            {
-                currentAnimation = null;
-            }
-        }
+        AnimationController.Update(secondDifference, this);
     }
 #endif
 

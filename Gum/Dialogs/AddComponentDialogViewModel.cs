@@ -1,5 +1,6 @@
 ﻿using Gum.DataTypes;
 using Gum.Managers;
+using Gum.Services;
 using Gum.Services.Dialogs;
 using Gum.ToolCommands;
 using Gum.ToolStates;
@@ -32,7 +33,7 @@ public class AddComponentDialogViewModel : GetUserStringDialogBaseViewModel
     {
         if (Value is null || Error is not null) return;
 
-        ITreeNode nodeToAddTo = _selectedState.SelectedTreeNode;
+        ITreeNode? nodeToAddTo = _selectedState.SelectedTreeNode;
 
         while (nodeToAddTo is { Tag: ComponentSave, Parent: { } parent })
         {
@@ -42,7 +43,8 @@ public class AddComponentDialogViewModel : GetUserStringDialogBaseViewModel
         FilePath? path = nodeToAddTo?.GetFullFilePath();
         if (nodeToAddTo == null || !nodeToAddTo.IsPartOfComponentsFolderStructure())
         {
-            path = GumState.Self.ProjectState.ComponentFilePath;
+            var projectState = Locator.GetRequiredService<IProjectState>();
+            path = projectState.ComponentFilePath;
         }
 
         if (path != null)

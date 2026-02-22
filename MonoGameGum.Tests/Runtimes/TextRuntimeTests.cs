@@ -2,7 +2,7 @@
 using Gum.Wireframe;
 using Microsoft.Xna.Framework.Graphics;
 using MonoGameGum.GueDeriving;
-using MonoGameGum.Localization;
+using Gum.Localization;
 using Moq;
 using RenderingLibrary.Graphics;
 using Shouldly;
@@ -67,6 +67,17 @@ $"chars count=223\r\n";
         var widthAfter = textRuntime.GetAbsoluteWidth();
 
         widthBefore.ShouldBe(widthAfter, "Because a trailing newline should not affect the width of a text, regardless of its XAdavance");
+    }
+
+    #endregion
+
+    #region Clone
+    [Fact]
+    public void Clone_ShouldCreateClonedText()
+    {
+        Text sut = new();
+        var clone = sut.Clone();
+        clone.ShouldNotBeNull();
     }
 
     #endregion
@@ -233,6 +244,75 @@ $"chars count=223\r\n";
     {
         TextRuntime sut = new();
         sut.HasEvents.ShouldBeFalse();
+    }
+
+    #endregion
+
+    #region IsBold
+
+    [Fact]
+    public void IsBold_ShouldChangeFont_OnFontPropertiesSet()
+    {
+        // file name is:
+        // FontCache\Font18SomeFont_Italic_Bold.fnt
+        var italicBoldFont = new BitmapFont((Texture2D)null!, fontPattern);
+        var loaderManager = global::RenderingLibrary.Content.LoaderManager.Self;
+        string fileName = FileManager.Standardize("FontCache\\Font18SomeFont_Italic_Bold.fnt", preserveCase: true, makeAbsolute: true);
+        loaderManager.AddDisposable(fileName, italicBoldFont);
+
+        TextRuntime sut = new();
+        sut.UseCustomFont = true;
+        // set up all the properties:
+        sut.FontSize = 18;
+        sut.Font = "SomeFont";
+        sut.IsItalic = true;
+
+        sut.UseCustomFont = false;
+
+        sut.IsBold = true;
+
+        sut.BitmapFont.ShouldBe(italicBoldFont);
+    }
+
+    #endregion
+
+    #region MaxWidth
+
+    [Fact]
+    public void MaxWidth_ShouldWrapText_IfTextExceedsMaxWidth()
+    {
+        TextRuntime textRuntime = new();
+        textRuntime.Width = 0;
+        textRuntime.WidthUnits = Gum.DataTypes.DimensionUnitType.RelativeToChildren;
+        textRuntime.MaxWidth = 50; // Set a max width
+        textRuntime.Text = "a a a a a a a a a a a a a a a a a";
+
+        textRuntime.GetAbsoluteWidth().ShouldBeLessThanOrEqualTo(50);
+        var innerText = (Text)textRuntime.RenderableComponent;
+        innerText.WrappedText.Count.ShouldBeGreaterThan(1);
+        var lineCount = innerText.WrappedText.Count;
+
+        var absoluteHeight = textRuntime.GetAbsoluteHeight();
+        absoluteHeight.ShouldBe(lineCount * textRuntime.BitmapFont.LineHeightInPixels);
+    }
+
+    #endregion
+
+    #region PropertyChanged
+
+    [Fact]
+    public void PropertyChanged_ShouldRaise_WhenTextChanges()
+    {
+        bool wasChanged = false;
+        TextRuntime textRuntime = new();
+        textRuntime.PropertyChanged += (_, _) =>
+        {
+            wasChanged = true;
+        };
+
+        textRuntime.Text = "Hello 1234";
+
+        wasChanged.ShouldBeTrue();
     }
 
     #endregion
@@ -448,83 +528,80 @@ $"chars count=223\r\n";
         text.WrappedText[3].ShouldNotBeEmpty("jkl");
     }
 
-    #endregion
+    [Fact]
+    public void WrappedText_ShouldPreferZeroWidthSpace_WhenBreakingMidWord()
+    {
+        // bypassing TextRuntime to test this directly:
+        var text = new Text();
+        text.Width = 86; 
+        Text.IsMidWordLineBreakEnabled = true;
 
-    #region MaxWidth
+        // Create a long word with zero-width space at a preferred break point
+        // "abcde\u200Bfghijklmno" - the zero-width space is after 'e'
+        text.RawText = "abcde\u200Bfghijklmno";
+
+        // Should break at the zero-width space position
+        text.WrappedText.Count.ShouldBe(2);
+        text.WrappedText[0].ShouldBe("abcde");
+        text.WrappedText[1].ShouldBe("fghijklmno");
+    }
 
     [Fact]
-    public void MaxWidth_ShouldWrapText_IfTextExceedsMaxWidth()
+    public void WrappedText_ShouldRemoveZeroWidthSpace_WhenBreakingAtIt()
     {
-        TextRuntime textRuntime = new();
-        textRuntime.Width = 0;
-        textRuntime.WidthUnits = Gum.DataTypes.DimensionUnitType.RelativeToChildren;
-        textRuntime.MaxWidth = 50; // Set a max width
-        textRuntime.Text = "a a a a a a a a a a a a a a a a a";
+        var text = new Text();
+        text.Width = 50;
+        Text.IsMidWordLineBreakEnabled = true;
 
-        textRuntime.GetAbsoluteWidth().ShouldBeLessThanOrEqualTo(50);
-        var innerText = (Text)textRuntime.RenderableComponent;
-        innerText.WrappedText.Count.ShouldBeGreaterThan(1);
-        var lineCount = innerText.WrappedText.Count;
+        text.RawText = "abc\u200Bdef";
 
-        var absoluteHeight = textRuntime.GetAbsoluteHeight();
-        absoluteHeight.ShouldBe(lineCount * textRuntime.BitmapFont.LineHeightInPixels);
+        // The zero-width space should be removed from output
+        text.WrappedText.Count.ShouldBe(2);
+        text.WrappedText[0].ShouldBe("abc");
+        text.WrappedText[1].ShouldBe("def");
+
+        // Neither line should contain the zero-width space character
+        text.WrappedText[0].ShouldNotContain("\u200B");
+        text.WrappedText[1].ShouldNotContain("\u200B");
+    }
+
+    [Fact]
+    public void WrappedText_ShouldIgnoreZeroWidthSpace_IfItExceedsWrappingWidth()
+    {
+        var text = new Text();
+        text.Width = 40; // Only fits about 4 characters
+        Text.IsMidWordLineBreakEnabled = true;
+
+        // Zero-width space is at position 7, but line can only fit 4 chars
+        // Should break at regular position instead
+        text.RawText = "abcdefg\u200Bhijklmnop";
+
+        text.WrappedText.Count.ShouldBeGreaterThan(2);
+        // First line should be less than the zero-width space position
+        text.WrappedText[0].Length.ShouldBeLessThan(7);
+    }
+
+    [Fact]
+    public void WrappedText_ShouldHandleMultipleZeroWidthSpaces_InSameWord()
+    {
+        var text = new Text();
+        text.Width = 55; // Enough for about 5 characters
+        Text.IsMidWordLineBreakEnabled = true;
+
+        // Multiple zero-width spaces: "abc\u200Bdef\u200Bghi"
+        // Should prefer the last one before exceeding width
+        text.RawText = "abc\u200Bdef\u200Bghijklmno";
+
+        text.WrappedText.Count.ShouldBe(4);
+        // Should break at second zero-width space (after "def")
+        text.WrappedText[0].ShouldBe("abc");
+        text.WrappedText[1].ShouldBe("def");
     }
 
     #endregion
 
-    #region Clone
-    [Fact]
-    public void Clone_ShouldCreateClonedText()
-    {
-        Text sut = new();
-        var clone = sut.Clone();
-        clone.ShouldNotBeNull();
-    }
+    #region UseCustomnFont
 
-    #endregion
-
-    #region PropertyChanged
-
-    [Fact]
-    public void PropertyChanged_ShouldRaise_WhenTextChanges()
-    {
-        bool wasChanged = false;
-        TextRuntime textRuntime = new();
-        textRuntime.PropertyChanged += (_, _) =>
-        {
-            wasChanged = true;
-        };
-
-        textRuntime.Text = "Hello 1234";
-
-        wasChanged.ShouldBeTrue();
-    }
-
-    #endregion
-
-    [Fact]
-    public void IsBold_ShouldChangeFont_OnFontPropertiesSet()
-    {
-        // file name is:
-        // FontCache\Font18SomeFont_Italic_Bold.fnt
-        var italicBoldFont = new BitmapFont((Texture2D)null!, fontPattern);
-        var loaderManager = global::RenderingLibrary.Content.LoaderManager.Self;
-        string fileName = FileManager.Standardize("FontCache\\Font18SomeFont_Italic_Bold.fnt", preserveCase: true, makeAbsolute: true);
-        loaderManager.AddDisposable(fileName, italicBoldFont);
-
-        TextRuntime sut = new();
-        sut.UseCustomFont = true;
-        // set up all the properties:
-        sut.FontSize = 18;
-        sut.Font = "SomeFont";
-        sut.IsItalic = true;
-
-        sut.UseCustomFont = false;
-
-        sut.IsBold = true;
-
-        sut.BitmapFont.ShouldBe(italicBoldFont);
-    }
 
     [Fact]
     public void UseCustomFont_ShouldChangeFont_OnFontPropertiesSet()
@@ -548,6 +625,8 @@ $"chars count=223\r\n";
 
         sut.BitmapFont.ShouldBe(italicBoldFont);
     }
+
+    #endregion
 
     [Fact]
     public void MaxNumberOfLetters_ShouldNotChangeDimensions()

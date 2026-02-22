@@ -5,6 +5,7 @@ using Gum.DataTypes.Variables;
 using Gum.Managers;
 using Gum.Messages;
 using Gum.Plugins;
+using Gum.Plugins.InternalPlugins.VariableGrid;
 using Gum.Services;
 using Gum.Services.Dialogs;
 using Gum.ToolCommands;
@@ -49,7 +50,7 @@ public class CopiedData
 
 #endregion
 
-public class CopyPasteLogic
+public class CopyPasteLogic : ICopyPasteLogic
 {
     #region Fields/Properties
 
@@ -60,10 +61,12 @@ public class CopyPasteLogic
     private readonly IFileCommands _fileCommands;
     private readonly ProjectCommands _projectCommands;
     private readonly IUndoManager _undoManager;
-    private readonly DeleteLogic _deleteLogic;
+    private readonly IDeleteLogic _deleteLogic;
     private readonly PluginManager _pluginManager;
     private readonly IMessenger _messenger;
-    private readonly WireframeObjectManager _wireframeObjectManager;
+    private readonly IWireframeObjectManager _wireframeObjectManager;
+    private readonly IProjectState _projectState;
+    private readonly StandardElementsManagerGumTool _standardElementsManagerGumTool;
 
     public CopiedData CopiedData { get; private set; } = new CopiedData();
 
@@ -88,10 +91,12 @@ public class CopyPasteLogic
         IFileCommands fileCommands,
         ProjectCommands projectCommands,
         IUndoManager undoManager,
-        DeleteLogic deleteLogic,
+        IDeleteLogic deleteLogic,
         PluginManager pluginManager,
-        WireframeObjectManager wireframeObjectManager,
-        IMessenger messenger
+        IWireframeObjectManager wireframeObjectManager,
+        IMessenger messenger,
+        IProjectState projectState,
+        StandardElementsManagerGumTool standardElementsManagerGumTool
         )
     {
         _wireframeObjectManager = wireframeObjectManager;
@@ -105,6 +110,8 @@ public class CopyPasteLogic
         _deleteLogic = deleteLogic;
         _pluginManager = pluginManager;
         _messenger = messenger;
+        _projectState = projectState;
+        _standardElementsManagerGumTool = standardElementsManagerGumTool;
 
 
         _messenger.Register<SelectionChangedMessage>(
@@ -907,13 +914,13 @@ public class CopyPasteLogic
         {
             toAdd = ((ScreenSave)CopiedData.CopiedElement).Clone();
             toAdd.Initialize(null);
-            StandardElementsManagerGumTool.Self.FixCustomTypeConverters(toAdd);
+            _standardElementsManagerGumTool.FixCustomTypeConverters(toAdd);
         }
         else
         {
             toAdd = ((ComponentSave)CopiedData.CopiedElement).Clone();
             ((ComponentSave)toAdd).InitializeDefaultAndComponentVariables();
-            StandardElementsManagerGumTool.Self.FixCustomTypeConverters((ComponentSave)toAdd);
+            _standardElementsManagerGumTool.FixCustomTypeConverters((ComponentSave)toAdd);
 
         }
 
@@ -935,9 +942,9 @@ public class CopyPasteLogic
         }
 
         List<string> allElementNames = new List<string>();
-        allElementNames.AddRange(ProjectState.Self.GumProjectSave.Screens.Select(item => item.Name.ToLowerInvariant()));
-        allElementNames.AddRange(ProjectState.Self.GumProjectSave.Components.Select(item => item.Name.ToLowerInvariant()));
-        allElementNames.AddRange(ProjectState.Self.GumProjectSave.StandardElements.Select(item => item.Name.ToLowerInvariant()));
+        allElementNames.AddRange(_projectState.GumProjectSave.Screens.Select(item => item.Name.ToLowerInvariant()));
+        allElementNames.AddRange(_projectState.GumProjectSave.Components.Select(item => item.Name.ToLowerInvariant()));
+        allElementNames.AddRange(_projectState.GumProjectSave.StandardElements.Select(item => item.Name.ToLowerInvariant()));
 
         while (allElementNames.Contains(toAdd.Name.ToLowerInvariant()))
         {
